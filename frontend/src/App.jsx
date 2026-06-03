@@ -15,8 +15,6 @@ import ExamList from "./pages/ExamList";
 import ExamTake from "./pages/ExamTake";
 import ExamResults from "./pages/ExamResults";
 
-const isAuthed = () => !!localStorage.getItem("osce-auth");
-
 function PrivateLayout() {
     const [navWidth, setNavWidth] = React.useState(72);
     const location = useLocation();
@@ -66,7 +64,7 @@ export default function App() {
                 {/* Private — all share the collapsible side navbar */}
                 <Route
                     element={
-                        <ProtectedRoute isAuthenticated={isAuthed()}>
+                        <ProtectedRoute>
                             <PrivateLayout />
                         </ProtectedRoute>
                     }

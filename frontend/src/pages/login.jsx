@@ -90,11 +90,13 @@ export default function Login() {
 	const [submitting, setSubmitting] = React.useState(false);
 	const [error, setError] = React.useState("");
 
-	// If already signed in, redirect away from login (no auto-login)
+	// If already signed in when visiting /login, redirect away immediately.
+	// onSubmit handles navigation after a fresh login — no need to re-run.
 	React.useEffect(() => {
 		const authed = localStorage.getItem("osce-auth") === "1";
 		if (authed) navigate(next, { replace: true });
-	}, [navigate, next]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	const onSubmit = async (e) => {
 		e.preventDefault();
