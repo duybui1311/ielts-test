@@ -1,0 +1,9 @@
+.env
+**/.env
+__pycache__/
+**/__pycache__/
+.idea/
+**/.idea/
+*.gguf
+node_modules/
+frontend/build/
