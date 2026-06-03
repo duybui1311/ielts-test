@@ -1,4 +1,4 @@
-# IELTS Platform — CLAUDE.md
+# IELTS Platform 
 
 ## What this project is
 An IELTS testing and auto-grading platform adapted from an OSCE medical-exam codebase. Teachers import full tests; students take them; the platform auto-grades Reading and Listening instantly and tracks mistake patterns by sub-skill.
