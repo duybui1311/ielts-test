@@ -54,22 +54,7 @@ const FIELD_SX = {
     },
 };
 
-const RAW_API_BASE =
-    typeof process !== "undefined" &&
-    process.env &&
-    process.env.REACT_APP_API_URL
-        ? process.env.REACT_APP_API_URL
-        : "";
-
-if (!RAW_API_BASE) {
-    console.error(
-        "[CreateNewExam] REACT_APP_API_URL is NOT set. " +
-        "Set it in your frontend .env (e.g. REACT_APP_API_URL=http://127.0.0.1:8000/)"
-    );
-}
-
-const API_BASE = (RAW_API_BASE || "http://127.0.0.1:8000").replace(/\/+$/, "");
-console.log("[CreateNewExam] API_BASE =", API_BASE);
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 function joinApi(path) {
     if (!path.startsWith("/")) path = "/" + path;

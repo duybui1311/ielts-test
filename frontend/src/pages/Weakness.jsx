@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-const API = process.env.REACT_APP_API_URL;
+const API = import.meta.env.VITE_API_URL || "";
 
 export default function Weakness({ userId }) {
   const [data, setData] = useState([]);

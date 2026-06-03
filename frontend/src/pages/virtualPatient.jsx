@@ -22,7 +22,7 @@ const theme = createTheme({
 });
 
 /* ======== CRA env + URL join  ======== */
-const API_BASE = (process.env.REACT_APP_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 const joinURL = (base, path) => `${base}${path.startsWith("/") ? path : `/${path}`}`;
 
 /* ======== Backend helpers ======== */

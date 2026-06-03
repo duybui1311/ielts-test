@@ -11,7 +11,7 @@ import {
 	AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 
-const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const dashboardUrl = () =>
 	API_BASE ? `${API_BASE}/api/dashboard` : "/api/dashboard";
 
