@@ -7,3 +7,12 @@ __pycache__/
 *.gguf
 node_modules/
 frontend/build/
+frontend/dist/
+.venv/
+*.log
+*.err
+*.iml
+frontend.log
+frontend.err
+uvicorn.log
+uvicorn.err

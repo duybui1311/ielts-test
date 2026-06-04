@@ -6,13 +6,11 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import DashboardRoundedIcon       from "@mui/icons-material/DashboardRounded";
-import ChecklistRoundedIcon       from "@mui/icons-material/ChecklistRounded";
 import CalendarTodayIcon          from "@mui/icons-material/CalendarToday";
 import HistoryRoundedIcon         from "@mui/icons-material/HistoryRounded";
 import SettingsRoundedIcon        from "@mui/icons-material/SettingsRounded";
 import HelpOutlineRoundedIcon     from "@mui/icons-material/HelpOutlineRounded";
 import LogoutRoundedIcon          from "@mui/icons-material/LogoutRounded";
-import AssignmentTurnedInRounded  from "@mui/icons-material/AssignmentTurnedInRounded";
 import SchoolRoundedIcon          from "@mui/icons-material/SchoolRounded";
 
 import { logout } from "../pages/login";
@@ -23,19 +21,11 @@ export const NAVBAR_WIDTH_EXPANDED  = 220;
 const ITEMS = [
     { key: "exams",     label: "My Tests",       icon: <SchoolRoundedIcon />,        path: "/exams" },
     { key: "dashboard", label: "Dashboard",      icon: <DashboardRoundedIcon />,     path: "/dashboard" },
-    { key: "stations",  label: "Stations",       icon: <ChecklistRoundedIcon />,     path: "/stations" },
     { key: "flash",     label: "Flash cards",    icon: <CalendarTodayIcon />,        path: "/flashcard" },
     { key: "history",   label: "History",        icon: <HistoryRoundedIcon />,       path: "/history" },
     { key: "settings",  label: "Settings",       icon: <SettingsRoundedIcon />,      path: "/settings" },
     { key: "help",      label: "Help",           icon: <HelpOutlineRoundedIcon />,   path: "/help" },
 ];
-
-const TEACHER_ITEM = {
-    key: "marking",
-    label: "Grading exam",
-    icon: <AssignmentTurnedInRounded />,
-    path: "/marking",
-};
 
 export default function Navbar({
     activeKey = "exams",
@@ -51,24 +41,11 @@ export default function Navbar({
         onWidthChange?.(expanded ? NAVBAR_WIDTH_EXPANDED : NAVBAR_WIDTH_COLLAPSED);
     }, [expanded, onWidthChange]);
 
-    const role = React.useMemo(() => {
-        try {
-            const raw = (localStorage.getItem("osce-role") || "student").toLowerCase();
-            return raw === "teacher" ? "teacher" : "student";
-        } catch { return "student"; }
-    }, []);
-
     const userName = React.useMemo(() => {
         try { return localStorage.getItem("osce-name") || ""; } catch { return ""; }
     }, []);
 
-    const NAV_ITEMS = React.useMemo(() => {
-        if (role !== "teacher") return ITEMS;
-        const idx = ITEMS.findIndex((i) => i.key === "stations");
-        const arr = [...ITEMS];
-        arr.splice((idx >= 0 ? idx : 0) + 1, 0, TEACHER_ITEM);
-        return arr;
-    }, [role]);
+    const NAV_ITEMS = ITEMS;
 
     const commonItemSx = (theme, selected) => ({
         mb: 0.5,

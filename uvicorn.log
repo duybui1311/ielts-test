@@ -1,8 +1,0 @@
-INFO:     127.0.0.1:62089 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60365 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49912 - "POST /api/tests/import HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53643 - "POST /api/tests/import HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64700 - "POST /api/autograde/exam/1 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64709 - "GET /api/analytics/student/1 HTTP/1.1" 200 OK
-  INFO:     127.0.0.1:54985 - "GET /api/health HTTP/1.1" 200 OK
- 

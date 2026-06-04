@@ -3,13 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "rea
 import { Box, CssBaseline } from "@mui/material";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
-import Stations from "./pages/stations";
 import TeacherDashboard from "./pages/teacherDashboard";
 import Navbar from "./component/navbar";
 import ProtectedRoute from "./component/ProtectedRoute";
 import CreateNewExam from "./pages/CreateNewExam";
-import Marking from "./pages/grading";
-import DoingExamPage from "./pages/RealPatient";
 import FlashcardPage from "./pages/flashcard";
 import ExamList from "./pages/ExamList";
 import ExamTake from "./pages/ExamTake";
@@ -26,8 +23,6 @@ function PrivateLayout() {
         if (p.startsWith("/results/"))     return "exams";
         if (p.startsWith("/dashboard"))    return "dashboard";
         if (p.startsWith("/flashcard"))    return "flashcard";
-        if (p.startsWith("/stations"))     return "stations";
-        if (p.startsWith("/chat") || p.startsWith("/realexam")) return "chat";
         if (p.startsWith("/history"))      return "history";
         if (p.startsWith("/settings"))     return "settings";
         if (p.startsWith("/help"))         return "help";
@@ -75,11 +70,8 @@ export default function App() {
                     <Route path="/results/:attemptId"  element={<ExamResults />} />
                     <Route path="/dashboard"           element={<Dashboard />} />
                     <Route path="/flashcard"           element={<FlashcardPage />} />
-                    <Route path="/stations"            element={<Stations />} />
-                    <Route path="/chat"                element={<DoingExamPage />} />
                     <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
                     <Route path="/create-exam"         element={<CreateNewExam />} />
-                    <Route path="/marking"             element={<Marking />} />
                     <Route path="/settings"            element={<div />} />
                     <Route path="/help"                element={<div />} />
                 </Route>

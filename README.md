@@ -6,7 +6,7 @@ An IELTS testing and auto-grading platform adapted from an OSCE medical-exam cod
 ## Stack
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2 (ORM + `create_all`), psycopg2-binary
 - **Database:** Supabase Postgres (session pooler, `aws-1-ap-southeast-1`)
-- **Frontend:** React 19 (Create React App), recharts for analytics charts
+- **Frontend:** React 19 (Vite), recharts for analytics charts
 - **Runtime:** uvicorn with `--reload`, started from repo root as `uvicorn backend.main:app`
 
 ## Running locally
@@ -15,7 +15,7 @@ An IELTS testing and auto-grading platform adapted from an OSCE medical-exam cod
 .\.venv\Scripts\Activate.ps1
 uvicorn backend.main:app --reload --port 8000
 # frontend (separate terminal)
-cd frontend && npm start
+cd frontend && npm run dev
 ```
 Backend: http://localhost:8000 — Swagger UI: http://localhost:8000/docs  
 Frontend: http://localhost:3000
