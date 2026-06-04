@@ -7,8 +7,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import QuizIcon from "@mui/icons-material/Quiz";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-
-const SKILL_COLOR = { reading: "primary", listening: "secondary", writing: "success", speaking: "warning" };
+import { PageHeader, SkillChip } from "../component/ui";
 
 export default function ExamList() {
   const [exams, setExams] = useState([]);
@@ -20,7 +19,7 @@ export default function ExamList() {
   useEffect(() => {
     apiFetch("/api/exams")
       .then((r) => r.json())
-      .then(setExams)
+      .then((d) => setExams(Array.isArray(d) ? d : []))
       .catch(() => setError("Could not load exams."))
       .finally(() => setLoading(false));
   }, []);
@@ -53,12 +52,14 @@ export default function ExamList() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={3}>Available Tests</Typography>
+      <PageHeader title="My Tests" subtitle="Pick a test and start practising." />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {exams.length === 0 && !error && (
-        <Typography color="text.secondary">No tests available yet.</Typography>
+        <Card sx={{ p: 5, textAlign: "center" }}>
+          <Typography color="text.secondary">No tests available yet.</Typography>
+        </Card>
       )}
 
       <Box
@@ -69,21 +70,22 @@ export default function ExamList() {
         }}
       >
         {exams.map((exam) => (
-          <Card key={exam.id} variant="outlined">
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
+          <Card
+            key={exam.id}
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              transition: "transform .15s ease, box-shadow .15s ease",
+              "&:hover": { transform: "translateY(-3px)" },
+            }}
+          >
+            <CardContent sx={{ flexGrow: 1 }}>
+              <Typography variant="h6" fontWeight={700} gutterBottom>
                 {exam.name}
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={1.5}>
-                {(exam.skills || []).map((s) => (
-                  <Chip
-                    key={s}
-                    label={s}
-                    size="small"
-                    color={SKILL_COLOR[s] || "default"}
-                  />
-                ))}
-                <Chip label={exam.difficulty} size="small" variant="outlined" />
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
+                {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
+                <Chip label={exam.difficulty} size="small" variant="outlined" sx={{ textTransform: "capitalize" }} />
               </Stack>
               <Stack direction="row" spacing={2}>
                 <Stack direction="row" alignItems="center" spacing={0.5}>

@@ -1,0 +1,155 @@
+"""Teacher dashboard — classes, exams and recent student submissions.
+
+Owner-scoped via the `X-User-Id` header (test-version auth). Degrades to empty
+structures so the page renders for a teacher with no classes yet.
+"""
+from typing import Optional
+from collections import defaultdict
+from fastapi import APIRouter, Depends, Header
+from sqlalchemy.orm import Session
+
+from backend.service.database import get_db
+from backend.service import models
+
+router = APIRouter(prefix="/api/teacher", tags=["teacher"])
+
+_GRADED = (models.AttemptStatus.submitted, models.AttemptStatus.graded)
+
+
+def _user_id(x_user_id: Optional[str]) -> Optional[int]:
+    try:
+        return int(x_user_id) if x_user_id else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _avg(values):
+    vals = [v for v in values if v is not None]
+    return round(sum(vals) / len(vals), 1) if vals else None
+
+
+@router.get("/classes")
+def teacher_classes(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    uid = _user_id(x_user_id)
+    if not uid:
+        return []
+    classes = (
+        db.query(models.Class)
+        .filter(models.Class.owner_id == uid)
+        .order_by(models.Class.name.asc())
+        .all()
+    )
+    return [{"id": c.id, "name": c.name} for c in classes]
+
+
+@router.get("/dashboard")
+def teacher_dashboard(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    uid = _user_id(x_user_id)
+    empty = {
+        "kpis": {"classes": 0, "students": 0, "exams": 0, "to_review": 0},
+        "classes": [],
+        "band_trend": [],
+        "recent_submissions": [],
+    }
+    if not uid:
+        return empty
+
+    classes = db.query(models.Class).filter(models.Class.owner_id == uid).all()
+    if not classes:
+        return empty
+
+    class_ids = [c.id for c in classes]
+    exams = db.query(models.Exam).filter(models.Exam.class_id.in_(class_ids)).all()
+    exam_ids = [e.id for e in exams]
+
+    attempts = (
+        db.query(models.ExamAttempt)
+        .filter(models.ExamAttempt.exam_id.in_(exam_ids))
+        .all()
+        if exam_ids else []
+    )
+    attempts_by_exam = defaultdict(list)
+    for a in attempts:
+        attempts_by_exam[a.exam_id].append(a)
+
+    # enrolment counts per class
+    students_by_class = defaultdict(int)
+    for e in db.query(models.ClassEnrolment).filter(
+        models.ClassEnrolment.class_id.in_(class_ids)
+    ).all():
+        students_by_class[e.class_id] += 1
+
+    exams_by_class = defaultdict(list)
+    for e in exams:
+        exams_by_class[e.class_id].append(e)
+
+    classes_out = []
+    for c in classes:
+        ex_out = []
+        for e in exams_by_class.get(c.id, []):
+            ats = attempts_by_exam.get(e.id, [])
+            ex_out.append({
+                "id": e.id,
+                "name": e.name,
+                "attempts": len(ats),
+                "avg_band": _avg([a.overall_band for a in ats if a.status in _GRADED]),
+            })
+        classes_out.append({
+            "id": c.id,
+            "name": c.name,
+            "students": students_by_class.get(c.id, 0),
+            "exams": ex_out,
+        })
+
+    # band trend: class average overall_band grouped by month
+    buckets = defaultdict(list)
+    for a in attempts:
+        if a.status in _GRADED and a.overall_band is not None:
+            when = a.graded_at or a.submitted_at or a.started_at
+            if when:
+                buckets[when.strftime("%Y-%m")].append(a.overall_band)
+    band_trend = [
+        {"label": label, "avg": round(sum(v) / len(v), 2)}
+        for label, v in sorted(buckets.items())
+    ]
+
+    # recent submissions across all owned exams
+    user_names = {
+        u.id: (u.full_name or u.username or u.email or f"User {u.id}")
+        for u in db.query(models.User).all()
+    }
+    exam_names = {e.id: e.name for e in exams}
+    recent = sorted(
+        [a for a in attempts if a.status in _GRADED],
+        key=lambda x: x.submitted_at or x.started_at,
+        reverse=True,
+    )[:8]
+    recent_submissions = [
+        {
+            "attempt_id": a.id,
+            "student": user_names.get(a.user_id, f"User {a.user_id}"),
+            "exam": exam_names.get(a.exam_id, f"Exam {a.exam_id}"),
+            "band": a.overall_band,
+            "status": a.status.value,
+            "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
+        }
+        for a in recent
+    ]
+
+    return {
+        "kpis": {
+            "classes": len(classes),
+            "students": sum(students_by_class.values()),
+            "exams": len(exams),
+            "to_review": sum(1 for a in attempts if a.status == models.AttemptStatus.submitted),
+        },
+        "classes": classes_out,
+        "band_trend": band_trend,
+        "recent_submissions": recent_submissions,
+    }

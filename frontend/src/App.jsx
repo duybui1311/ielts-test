@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
-import { Box, CssBaseline } from "@mui/material";
+import { Box } from "@mui/material";
+import { ColorModeProvider } from "./theme/ColorModeContext";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import TeacherDashboard from "./pages/teacherDashboard";
@@ -11,6 +12,9 @@ import FlashcardPage from "./pages/flashcard";
 import ExamList from "./pages/ExamList";
 import ExamTake from "./pages/ExamTake";
 import ExamResults from "./pages/ExamResults";
+import History from "./pages/History";
+import Settings from "./pages/Settings";
+import Help from "./pages/Help";
 
 function PrivateLayout() {
     const [navWidth, setNavWidth] = React.useState(72);
@@ -18,14 +22,16 @@ function PrivateLayout() {
 
     const activeKey = React.useMemo(() => {
         const p = location.pathname;
-        if (p.startsWith("/exams"))        return "exams";
-        if (p.startsWith("/exam/"))        return "exams";
-        if (p.startsWith("/results/"))     return "exams";
-        if (p.startsWith("/dashboard"))    return "dashboard";
-        if (p.startsWith("/flashcard"))    return "flashcard";
-        if (p.startsWith("/history"))      return "history";
-        if (p.startsWith("/settings"))     return "settings";
-        if (p.startsWith("/help"))         return "help";
+        if (p.startsWith("/exams"))             return "exams";
+        if (p.startsWith("/exam/"))             return "exams";
+        if (p.startsWith("/results/"))          return "exams";
+        if (p.startsWith("/dashboard"))         return "dashboard";
+        if (p.startsWith("/teacher_dashboard")) return "teacher";
+        if (p.startsWith("/create-exam"))       return "create";
+        if (p.startsWith("/flashcard"))         return "flashcard";
+        if (p.startsWith("/history"))           return "history";
+        if (p.startsWith("/settings"))          return "settings";
+        if (p.startsWith("/help"))              return "help";
         return "exams";
     }, [location.pathname]);
 
@@ -50,34 +56,36 @@ function PrivateLayout() {
 
 export default function App() {
     return (
-        <BrowserRouter>
-            <CssBaseline />
-            <Routes>
-                {/* Public */}
-                <Route path="/login" element={<Login />} />
+        <ColorModeProvider>
+            <BrowserRouter>
+                <Routes>
+                    {/* Public */}
+                    <Route path="/login" element={<Login />} />
 
-                {/* Private — all share the collapsible side navbar */}
-                <Route
-                    element={
-                        <ProtectedRoute>
-                            <PrivateLayout />
-                        </ProtectedRoute>
-                    }
-                >
-                    <Route path="/"                    element={<Navigate to="/exams" replace />} />
-                    <Route path="/exams"               element={<ExamList />} />
-                    <Route path="/exam/:attemptId"     element={<ExamTake />} />
-                    <Route path="/results/:attemptId"  element={<ExamResults />} />
-                    <Route path="/dashboard"           element={<Dashboard />} />
-                    <Route path="/flashcard"           element={<FlashcardPage />} />
-                    <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
-                    <Route path="/create-exam"         element={<CreateNewExam />} />
-                    <Route path="/settings"            element={<div />} />
-                    <Route path="/help"                element={<div />} />
-                </Route>
+                    {/* Private — all share the collapsible side navbar */}
+                    <Route
+                        element={
+                            <ProtectedRoute>
+                                <PrivateLayout />
+                            </ProtectedRoute>
+                        }
+                    >
+                        <Route path="/"                    element={<Navigate to="/exams" replace />} />
+                        <Route path="/exams"               element={<ExamList />} />
+                        <Route path="/exam/:attemptId"     element={<ExamTake />} />
+                        <Route path="/results/:attemptId"  element={<ExamResults />} />
+                        <Route path="/dashboard"           element={<Dashboard />} />
+                        <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
+                        <Route path="/create-exam"         element={<CreateNewExam />} />
+                        <Route path="/flashcard"           element={<FlashcardPage />} />
+                        <Route path="/history"             element={<History />} />
+                        <Route path="/settings"            element={<Settings />} />
+                        <Route path="/help"                element={<Help />} />
+                    </Route>
 
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-        </BrowserRouter>
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+            </BrowserRouter>
+        </ColorModeProvider>
     );
 }
