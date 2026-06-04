@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Paper, Stack, Chip, Alert,
-  CircularProgress, Divider, Button,
+  CircularProgress, Divider, Button, useTheme,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
@@ -27,6 +27,7 @@ function BandBadge({ band }) {
 }
 
 export default function ExamResults() {
+  const theme = useTheme();
   const { attemptId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -213,7 +214,7 @@ export default function ExamResults() {
                 tickFormatter={(v) => v.replace(/_/g, " ")}
               />
               <Tooltip formatter={(v) => [v, "mistakes"]} />
-              <Bar dataKey="misses" fill="#1976d2" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="misses" fill={theme.palette.primary.main} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Paper>

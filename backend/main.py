@@ -4,7 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from .service.config import settings
 from .service.database import Base, engine
 from .service import models  # noqa: F401  (registers tables)
-from .routers import auth, tests_io, autograde, analytics, student_flow
+from .routers import (
+    auth, tests_io, autograde, analytics, student_flow,
+    dashboard, me, flashcards, teacher,
+)
 
 
 @asynccontextmanager
@@ -34,6 +37,10 @@ def create_app() -> FastAPI:
     app.include_router(autograde.router)
     app.include_router(analytics.router)
     app.include_router(student_flow.router)
+    app.include_router(dashboard.router)
+    app.include_router(me.router)
+    app.include_router(flashcards.router)
+    app.include_router(teacher.router)
 
     @app.get("/api/health")
     async def health_check():
