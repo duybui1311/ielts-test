@@ -15,6 +15,9 @@ import ExamResults from "./pages/ExamResults";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import Help from "./pages/Help";
+import Writing from "./pages/Writing";
+import Speaking from "./pages/Speaking";
+import Review from "./pages/Review";
 
 function PrivateLayout() {
     const [navWidth, setNavWidth] = React.useState(72);
@@ -28,6 +31,9 @@ function PrivateLayout() {
         if (p.startsWith("/dashboard"))         return "dashboard";
         if (p.startsWith("/teacher_dashboard")) return "teacher";
         if (p.startsWith("/create-exam"))       return "create";
+        if (p.startsWith("/writing"))           return "writing";
+        if (p.startsWith("/speaking"))          return "speaking";
+        if (p.startsWith("/review"))            return "review";
         if (p.startsWith("/flashcard"))         return "flashcard";
         if (p.startsWith("/history"))           return "history";
         if (p.startsWith("/settings"))          return "settings";
@@ -77,6 +83,9 @@ export default function App() {
                         <Route path="/dashboard"           element={<Dashboard />} />
                         <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
                         <Route path="/create-exam"         element={<CreateNewExam />} />
+                        <Route path="/writing"             element={<Writing />} />
+                        <Route path="/speaking"            element={<Speaking />} />
+                        <Route path="/review"              element={<Review />} />
                         <Route path="/flashcard"           element={<FlashcardPage />} />
                         <Route path="/history"             element={<History />} />
                         <Route path="/settings"            element={<Settings />} />

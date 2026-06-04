@@ -5,3 +5,7 @@ pydantic
 python-dotenv
 bcrypt
 psycopg2-binary
+python-multipart
+anthropic
+pypdf
+python-docx

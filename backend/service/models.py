@@ -406,6 +406,64 @@ class FlashcardReview(Base):
     card: Mapped["Flashcard"] = relationship("Flashcard", back_populates="reviews")
     user: Mapped["User"] = relationship("User", back_populates="flashcard_reviews")
 
+# -------------------- WRITING & SPEAKING PRACTICE --------------------
+
+class WritingTask(Base):
+    __tablename__ = "writing_tasks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_type: Mapped[str] = mapped_column(String(10), nullable=False)  # task1 | task2
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    prompt_md: Mapped[str] = mapped_column(Text, nullable=False)
+    image_url: Mapped[Optional[str]] = mapped_column(String(500))       # Task 1 chart/diagram
+    time_limit_min: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SpeakingTask(Base):
+    __tablename__ = "speaking_tasks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    part: Mapped[int] = mapped_column(Integer, nullable=False)          # 1 | 2 | 3
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    prompt_md: Mapped[str] = mapped_column(Text, nullable=False)
+    prep_sec: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    answer_sec: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WritingSubmission(Base):
+    __tablename__ = "writing_submissions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("writing_tasks.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    response_text: Mapped[str] = mapped_column(Text, nullable=False)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")  # submitted | reviewed
+    band: Mapped[Optional[float]] = mapped_column(Float)
+    feedback: Mapped[Optional[str]] = mapped_column(Text)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    task: Mapped["WritingTask"] = relationship("WritingTask")
+
+
+class SpeakingSubmission(Base):
+    __tablename__ = "speaking_submissions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("speaking_tasks.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    transcript: Mapped[Optional[str]] = mapped_column(Text)
+    audio_url: Mapped[Optional[str]] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")
+    band: Mapped[Optional[float]] = mapped_column(Float)
+    feedback: Mapped[Optional[str]] = mapped_column(Text)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    task: Mapped["SpeakingTask"] = relationship("SpeakingTask")
+
+
 # -------------------- MISTAKE-PATTERN TAGS (IELTS) --------------------
 
 class ErrorTag(Base):

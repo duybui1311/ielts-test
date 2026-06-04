@@ -9,6 +9,7 @@ node_modules/
 frontend/build/
 frontend/dist/
 .venv/
+backend/uploads/
 *.log
 *.err
 *.iml

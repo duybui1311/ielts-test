@@ -1,13 +1,19 @@
+import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from .service.config import settings
 from .service.database import Base, engine
 from .service import models  # noqa: F401  (registers tables)
 from .routers import (
     auth, tests_io, autograde, analytics, student_flow,
     dashboard, me, flashcards, teacher,
+    writing, speaking, review, ai_import,
 )
+
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 
 
 @asynccontextmanager
@@ -41,6 +47,14 @@ def create_app() -> FastAPI:
     app.include_router(me.router)
     app.include_router(flashcards.router)
     app.include_router(teacher.router)
+    app.include_router(writing.router)
+    app.include_router(speaking.router)
+    app.include_router(review.router)
+    app.include_router(ai_import.router)
+
+    # Serve uploaded speaking audio.
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
     @app.get("/api/health")
     async def health_check():
