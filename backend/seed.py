@@ -207,12 +207,51 @@ def _flashcards(db, *, owner_id):
     db.flush()
 
 
+def _practice_tasks(db, *, owner_id):
+    """Starter Writing + Speaking tasks (idempotent — only seeds once)."""
+    if db.query(models.WritingTask).first() or db.query(models.SpeakingTask).first():
+        return
+    db.add_all([
+        models.WritingTask(
+            task_type="task1", created_by=owner_id, time_limit_min=20,
+            title="Task 1 — Bar chart: coffee consumption",
+            prompt_md=("The chart below shows coffee consumption per person in four "
+                       "countries in 2010 and 2020. Summarise the information by "
+                       "selecting and reporting the main features, and make comparisons "
+                       "where relevant. Write at least 150 words."),
+        ),
+        models.WritingTask(
+            task_type="task2", created_by=owner_id, time_limit_min=40,
+            title="Task 2 — Technology and communication",
+            prompt_md=("Some people think that technology has made face-to-face "
+                       "communication less common and weakened relationships. To what "
+                       "extent do you agree or disagree? Give reasons and examples. "
+                       "Write at least 250 words."),
+        ),
+    ])
+    db.add_all([
+        models.SpeakingTask(part=1, created_by=owner_id, prep_sec=0, answer_sec=90,
+                            title="Part 1 — Hometown",
+                            prompt_md="Where is your hometown? What do you like most about it, and would you like to live there in the future?"),
+        models.SpeakingTask(part=2, created_by=owner_id, prep_sec=60, answer_sec=120,
+                            title="Part 2 — Describe a memorable journey",
+                            prompt_md=("Describe a journey that you remember well. You should say: where you went, "
+                                       "who you were with, what happened, and explain why it was memorable.")),
+        models.SpeakingTask(part=3, created_by=owner_id, prep_sec=0, answer_sec=120,
+                            title="Part 3 — Travel and tourism",
+                            prompt_md="How has tourism changed in your country over the last few decades? What are the benefits and drawbacks of international travel?"),
+    ])
+    db.commit()
+
+
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        if db.query(models.User).filter(models.User.email == TEACHER_EMAIL).first():
-            print("Demo data already present — nothing to do.")
+        existing_teacher = db.query(models.User).filter(models.User.email == TEACHER_EMAIL).first()
+        if existing_teacher:
+            _practice_tasks(db, owner_id=existing_teacher.id)
+            print("Demo data already present — ensured practice tasks.")
             print(f"  Teacher: {TEACHER_EMAIL} / {PASSWORD}")
             print(f"  Student: {STUDENT_EMAIL} / {PASSWORD}")
             return
@@ -232,6 +271,7 @@ def main():
 
         _attempt(db, exam=exam, student_id=student.id)
         _flashcards(db, owner_id=student.id)
+        _practice_tasks(db, owner_id=teacher.id)
         db.commit()
 
         print("Seed complete.")

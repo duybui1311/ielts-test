@@ -9,6 +9,9 @@ import SchoolRoundedIcon         from "@mui/icons-material/SchoolRounded";
 import DashboardRoundedIcon      from "@mui/icons-material/DashboardRounded";
 import InsightsRoundedIcon       from "@mui/icons-material/InsightsRounded";
 import AddBoxRoundedIcon         from "@mui/icons-material/AddBoxRounded";
+import EditNoteRoundedIcon       from "@mui/icons-material/EditNoteRounded";
+import MicRoundedIcon            from "@mui/icons-material/MicRounded";
+import RateReviewRoundedIcon     from "@mui/icons-material/RateReviewRounded";
 import StyleRoundedIcon          from "@mui/icons-material/StyleRounded";
 import HistoryRoundedIcon        from "@mui/icons-material/HistoryRounded";
 import SettingsRoundedIcon       from "@mui/icons-material/SettingsRounded";
@@ -26,6 +29,8 @@ export const NAVBAR_WIDTH_EXPANDED  = 220;
 const STUDENT_ITEMS = [
     { key: "exams",     label: "My Tests",   icon: <SchoolRoundedIcon />,      path: "/exams" },
     { key: "dashboard", label: "Dashboard",  icon: <DashboardRoundedIcon />,   path: "/dashboard" },
+    { key: "writing",   label: "Writing",    icon: <EditNoteRoundedIcon />,    path: "/writing" },
+    { key: "speaking",  label: "Speaking",   icon: <MicRoundedIcon />,         path: "/speaking" },
     { key: "flashcard", label: "Flashcards", icon: <StyleRoundedIcon />,       path: "/flashcard" },
     { key: "history",   label: "History",    icon: <HistoryRoundedIcon />,     path: "/history" },
     { key: "settings",  label: "Settings",   icon: <SettingsRoundedIcon />,    path: "/settings" },
@@ -36,6 +41,7 @@ const TEACHER_ITEMS = [
     { key: "exams",     label: "My Tests",        icon: <SchoolRoundedIcon />,      path: "/exams" },
     { key: "teacher",   label: "Class Dashboard", icon: <InsightsRoundedIcon />,    path: "/teacher_dashboard" },
     { key: "create",    label: "Create Exam",     icon: <AddBoxRoundedIcon />,      path: "/create-exam" },
+    { key: "review",    label: "Review",          icon: <RateReviewRoundedIcon />,  path: "/review" },
     { key: "flashcard", label: "Flashcards",      icon: <StyleRoundedIcon />,       path: "/flashcard" },
     { key: "history",   label: "History",         icon: <HistoryRoundedIcon />,     path: "/history" },
     { key: "settings",  label: "Settings",        icon: <SettingsRoundedIcon />,    path: "/settings" },

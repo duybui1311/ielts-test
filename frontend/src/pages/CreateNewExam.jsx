@@ -2,14 +2,41 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Button, TextField, MenuItem, IconButton,
   Divider, Radio, RadioGroup, FormControlLabel, Alert, Snackbar, Chip,
-  Collapse,
+  Collapse, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
+import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, getUserId } from "../api";
+import { apiFetch, getUserId, API_BASE } from "../api";
 import { PageHeader, SkillChip } from "../component/ui";
+
+/** Map the AI importer's TestIn-shaped JSON into the builder's section state. */
+function aiToSections(result) {
+  const skills = ["reading", "listening", "writing", "speaking"];
+  const subDefault = (qtype) =>
+    qtype === "mcq" ? "multiple_choice" : qtype === "short" ? "short_answer" : "short_answer";
+  return (result.sections || []).map((sec, si) => ({
+    key: uid(),
+    position: si + 1,
+    skill: skills.includes(sec.skill) ? sec.skill : "reading",
+    title: sec.title || `Section ${si + 1}`,
+    passage_md: sec.passage_md || "",
+    audio_url: "",
+    open: true,
+    questions: (sec.questions && sec.questions.length ? sec.questions : [{ qtype: "short", prompt: "" }]).map((q) => ({
+      key: uid(),
+      qtype: ["mcq", "short", "explain"].includes(q.qtype) ? q.qtype : "short",
+      prompt: q.prompt || "",
+      options: Array.isArray(q.options) && q.options.length ? q.options : ["", "", "", ""],
+      correct_index: Number.isInteger(q.correct_index) ? q.correct_index : 0,
+      accept_answers: Array.isArray(q.accept_answers) ? q.accept_answers.join(", ") : "",
+      sub_skill: q.sub_skill || subDefault(q.qtype),
+    })),
+  }));
+}
 
 const SKILLS = ["reading", "listening", "writing", "speaking"];
 const DIFFICULTIES = ["low", "medium", "high"];
@@ -50,6 +77,41 @@ export default function CreateNewExam() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
+
+  // AI import dialog
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+
+  const runImport = async () => {
+    if (!importFile) { setImportError("Choose a file first."); return; }
+    setImporting(true);
+    setImportError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await fetch(`${API_BASE}/api/import/ai`, {
+        method: "POST",
+        headers: { "X-User-Id": getUserId() || "" },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Import failed.");
+      if (data.name) setName(data.name);
+      if (data.difficulty) setDifficulty(data.difficulty);
+      if (data.time_limit_min) setTimeLimit(data.time_limit_min);
+      const secs = aiToSections(data);
+      if (secs.length) setSections(secs);
+      setImportOpen(false);
+      setImportFile(null);
+      setToast("Imported — review and edit, then Save.");
+    } catch (e) {
+      setImportError(e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   useEffect(() => {
     apiFetch("/api/teacher/classes")
@@ -187,9 +249,18 @@ export default function CreateNewExam() {
         title="Create Exam"
         subtitle="Build an IELTS test section by section. It will appear in students' My Tests."
         action={
-          <Button variant="contained" disabled={submitting} onClick={handleSubmit}>
-            {submitting ? "Saving…" : "Save test"}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={<AutoAwesomeRoundedIcon />}
+              onClick={() => { setImportError(""); setImportOpen(true); }}
+            >
+              Import from file (AI)
+            </Button>
+            <Button variant="contained" disabled={submitting} onClick={handleSubmit}>
+              {submitting ? "Saving…" : "Save test"}
+            </Button>
+          </Stack>
         }
       />
 
@@ -320,11 +391,52 @@ export default function CreateNewExam() {
 
       <Snackbar
         open={!!toast}
-        autoHideDuration={2000}
+        autoHideDuration={2500}
         onClose={() => setToast("")}
         message={toast}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
+
+      {/* AI import dialog */}
+      <Dialog open={importOpen} onClose={() => !importing && setImportOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Import a test from a file</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Upload a PDF, Word doc, or image of an IELTS test. The AI converts it into
+            editable sections and questions — you review and edit before saving.
+          </Typography>
+
+          {importError && <Alert severity="warning" sx={{ mb: 2 }}>{importError}</Alert>}
+
+          <Button
+            component="label"
+            variant="outlined"
+            startIcon={<UploadFileRoundedIcon />}
+            disabled={importing}
+          >
+            {importFile ? importFile.name : "Choose file"}
+            <input
+              hidden
+              type="file"
+              accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
+              onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportError(""); }}
+            />
+          </Button>
+
+          {importing && (
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 2 }}>
+              <CircularProgress size={20} />
+              <Typography variant="body2" color="text.secondary">Converting… this can take a few seconds.</Typography>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportOpen(false)} disabled={importing}>Cancel</Button>
+          <Button variant="contained" onClick={runImport} disabled={importing || !importFile}>
+            {importing ? "Converting…" : "Convert"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
