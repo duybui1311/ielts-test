@@ -16,10 +16,19 @@ code has been removed and remaining work targets IELTS only.
 - **Database:** Supabase Postgres (session pooler). `DATABASE_URL` lives in
   `backend/.env` (gitignored).
 - **Frontend:** React 19 + Vite, MUI, recharts. Dev server: `cd frontend && npm run dev`.
+- **Storage:** Supabase Storage holds uploaded chart images (`writing-charts`) and
+  speaking audio (`speaking-audio`); see `backend/service/storage.py`.
+- **Deploy:** root `Dockerfile` builds the backend (Python 3.12-slim, installs
+  `backend/requirements.txt`, runs `uvicorn backend.main:app` on `$PORT`). Required
+  env: `DATABASE_URL`, `FRONTEND_URL`; optional: `GEMINI_API_KEY`/`ANTHROPIC_API_KEY`
+  (AI import), `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` (uploads).
 
 ## Architecture
-- `backend/main.py` — app factory + lifespan (`create_all`). Registers five
-  routers: `auth`, `tests_io`, `autograde`, `analytics`, `student_flow`.
+- `backend/main.py` — app factory + lifespan (`create_all`), CORS (allows
+  `FRONTEND_URL` + localhost), and the `/uploads` static mount. Registers all
+  routers: `auth`, `tests_io`, `autograde`, `analytics`, `student_flow`,
+  `dashboard`, `me`, `flashcards`, `teacher`, `writing`, `speaking`, `review`,
+  `ai_import`.
 - `backend/service/models.py` — all SQLAlchemy models.
 - `backend/service/autograde.py` — MCQ + short-answer scoring, raw→band
   conversion, ErrorTag writes for analytics.
@@ -27,9 +36,14 @@ code has been removed and remaining work targets IELTS only.
 - `backend/service/storage.py` — uploads bytes to Supabase Storage and returns the
   public URL. Buckets: `writing-charts` (Task 1 images), `speaking-audio`. Needs
   `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (service key is server-side only).
-- `frontend/src/App.jsx` — routes. Live student pages: `ExamList`, `ExamTake`,
-  `ExamResults`, plus `dashboard`, `flashcard`, `teacherDashboard`, `CreateNewExam`,
-  `login` and the shared `navbar`.
+- `frontend/src/App.jsx` — routes. Pages: `ExamList`, `ExamTake`, `ExamResults`,
+  `dashboard`, `teacherDashboard`, `CreateNewExam`, `Writing`, `Speaking`,
+  `Review`, `flashcard`, `History`, `Settings`, `Help`, `login`, plus the shared
+  `navbar`.
+- `frontend/src/component/ui.jsx` — shared presentational helpers (`PageHeader`,
+  `StatCard`, `SkillChip`, `bandColor`) and `chartTheme(theme)`, which returns
+  themed Recharts props (axis ticks/lines, grid, tooltip) so every chart stays
+  readable in both light and dark mode.
 
 ## Core flows
 - **Test import/export** — `POST /api/tests/import`, `GET /api/tests/{id}/export`.
@@ -60,7 +74,9 @@ code has been removed and remaining work targets IELTS only.
 ## Status & boundaries
 - **Test version.** Schema is created with `create_all` (no Alembic yet).
 - **Auth is a placeholder** — `POST /api/auth/login` verifies bcrypt and returns
-  `token: "test-{user_id}"`. No JWT, no route guards. Replace before any real deploy.
+  `token: "test-{user_id}"`; the frontend passes identity via the `X-User-Id`
+  header and routers trust it. No JWT, no route guards. **Replace with JWT before
+  public launch.**
 - **AI Writing/Speaking grading is future work**, not implemented.
 
 ## When changing things

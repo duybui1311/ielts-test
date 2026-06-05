@@ -1,0 +1,11 @@
+.venv/
+frontend/
+node_modules/
+.git/
+*.log
+*.err
+docs/
+__pycache__/
+**/__pycache__/
+*.gguf
+backend/model/
