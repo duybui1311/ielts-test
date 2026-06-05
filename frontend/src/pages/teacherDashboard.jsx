@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-import { PageHeader, StatCard, bandColor } from "../component/ui";
+import { PageHeader, StatCard, bandColor, chartTheme } from "../component/ui";
 
 const EMPTY = {
   kpis: { classes: 0, students: 0, exams: 0, to_review: 0 },
@@ -42,6 +42,7 @@ export default function TeacherDashboard() {
 
   const { kpis, classes, band_trend, recent_submissions } = data;
   const primary = theme.palette.primary.main;
+  const ct = chartTheme(theme);
   const hasClasses = classes.length > 0;
 
   return (
@@ -89,10 +90,10 @@ export default function TeacherDashboard() {
                           <stop offset="95%" stopColor={primary} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid vertical={false} stroke={theme.palette.divider} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis domain={[0, 9]} tick={{ fontSize: 12 }} />
-                      <Tooltip />
+                      <CartesianGrid vertical={false} stroke={ct.grid.stroke} />
+                      <XAxis dataKey="label" tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
+                      <YAxis domain={[0, 9]} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
+                      <Tooltip {...ct.tooltip} />
                       <Area type="monotone" dataKey="avg" stroke={primary} strokeWidth={2.5} fill="url(#teacherGradient)" />
                     </AreaChart>
                   </ResponsiveContainer>

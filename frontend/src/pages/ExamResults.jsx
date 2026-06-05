@@ -11,6 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { apiFetch } from "../api";
+import { PageHeader, chartTheme } from "../component/ui";
 
 function BandBadge({ band }) {
   const color =
@@ -52,8 +53,20 @@ export default function ExamResults() {
   if (error) return <Alert severity="error">{error}</Alert>;
   if (!data) return null;
 
+  const ct = chartTheme(theme);
+
   return (
     <Box>
+      <PageHeader
+        title="Results"
+        subtitle="Your band score and per-question breakdown."
+        action={
+          <Button variant="outlined" onClick={() => navigate("/exams")}>
+            Back to Tests
+          </Button>
+        }
+      />
+
       {/* ── Overall band ── */}
       <Paper variant="outlined" sx={{ p: 4, mb: 3, textAlign: "center" }}>
         <Typography variant="overline" color="text.secondary" letterSpacing={2}>
@@ -65,13 +78,6 @@ export default function ExamResults() {
             ? "Test completed and graded"
             : data.status}
         </Typography>
-        <Button
-          sx={{ mt: 2 }}
-          variant="outlined"
-          onClick={() => navigate("/exams")}
-        >
-          Back to Tests
-        </Button>
       </Paper>
 
       {/* ── Per-section breakdown ── */}
@@ -206,14 +212,17 @@ export default function ExamResults() {
               layout="vertical"
               margin={{ left: 16, right: 24, top: 4, bottom: 4 }}
             >
-              <XAxis type="number" allowDecimals={false} />
+              <XAxis type="number" allowDecimals={false} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
               <YAxis
                 type="category"
                 dataKey="name"
                 width={160}
+                tick={ct.tick}
+                axisLine={ct.axisLine}
+                tickLine={ct.tickLine}
                 tickFormatter={(v) => v.replace(/_/g, " ")}
               />
-              <Tooltip formatter={(v) => [v, "mistakes"]} />
+              <Tooltip {...ct.tooltip} formatter={(v) => [v, "mistakes"]} cursor={{ fill: ct.grid.stroke }} />
               <Bar dataKey="misses" fill={theme.palette.primary.main} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>

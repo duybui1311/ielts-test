@@ -17,6 +17,35 @@ export function bandColor(band) {
   return "error.main";
 }
 
+/**
+ * Themed Recharts props so axes, gridlines and tooltips stay readable in both
+ * light and dark mode. Usage:
+ *   const ct = chartTheme(theme);
+ *   <XAxis tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
+ *   <CartesianGrid stroke={ct.grid.stroke} />
+ *   <Tooltip {...ct.tooltip} />
+ */
+export function chartTheme(theme) {
+  const line = { stroke: theme.palette.divider };
+  const textPrimary = theme.palette.text.primary;
+  return {
+    tick: { fontSize: 12, fill: theme.palette.text.secondary },
+    axisLine: line,
+    tickLine: line,
+    grid: { stroke: theme.palette.divider },
+    tooltip: {
+      contentStyle: {
+        background: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 8,
+        color: textPrimary,
+      },
+      labelStyle: { color: textPrimary },
+      itemStyle: { color: textPrimary },
+    },
+  };
+}
+
 export function SkillChip({ skill, ...rest }) {
   if (!skill) return null;
   return (

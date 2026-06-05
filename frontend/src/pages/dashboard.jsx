@@ -1,20 +1,57 @@
 import React, { useEffect, useState } from "react";
 import {
-  Box, Card, Stack, Typography, Button, Chip, CircularProgress, Divider,
-  useTheme,
+  Box, Card, CardActionArea, Stack, Typography, Button, Chip, CircularProgress,
+  Divider, useTheme, alpha,
 } from "@mui/material";
 import EmojiEventsRoundedIcon from "@mui/icons-material/EmojiEventsRounded";
 import FactCheckRoundedIcon from "@mui/icons-material/FactCheckRounded";
 import QuizRoundedIcon from "@mui/icons-material/QuizRounded";
 import ReportProblemRoundedIcon from "@mui/icons-material/ReportProblemRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
+import MicRoundedIcon from "@mui/icons-material/MicRounded";
+import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-import { PageHeader, StatCard, bandColor } from "../component/ui";
+import { PageHeader, StatCard, bandColor, chartTheme } from "../component/ui";
+
+const PRACTICE = [
+  { icon: <EditNoteRoundedIcon />, label: "Writing", desc: "Practise Task 1 & 2 essays", path: "/writing", color: "success.main" },
+  { icon: <MicRoundedIcon />, label: "Speaking", desc: "Record answers for feedback", path: "/speaking", color: "warning.main" },
+  { icon: <StyleRoundedIcon />, label: "Flashcards", desc: "Review vocabulary decks", path: "/flashcard", color: "secondary.main" },
+];
+
+function PracticeCard({ item, onClick }) {
+  return (
+    <Card>
+      <CardActionArea onClick={onClick} sx={{ p: 2.5 }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Box
+            sx={(theme) => ({
+              width: 48, height: 48, borderRadius: 2.5,
+              display: "grid", placeItems: "center",
+              color: item.color,
+              bgcolor: alpha(
+                theme.palette[item.color.split(".")[0]].main,
+                theme.palette.mode === "dark" ? 0.2 : 0.12
+              ),
+            })}
+          >
+            {item.icon}
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography fontWeight={700} noWrap>{item.label}</Typography>
+            <Typography variant="body2" color="text.secondary" noWrap>{item.desc}</Typography>
+          </Box>
+        </Stack>
+      </CardActionArea>
+    </Card>
+  );
+}
 
 function greeting() {
   const h = new Date().getHours();
@@ -59,7 +96,7 @@ export default function Dashboard() {
   const { kpis, band_trend, recent, weakness } = data;
   const hasData = kpis.tests_taken > 0;
   const primary = theme.palette.primary.main;
-  const gridStroke = theme.palette.divider;
+  const ct = chartTheme(theme);
 
   return (
     <Box>
@@ -108,6 +145,21 @@ export default function Dashboard() {
         />
       </Box>
 
+      {/* Practice quick actions */}
+      <Typography variant="subtitle1" sx={{ mb: 1.5 }}>Practice</Typography>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        {PRACTICE.map((p) => (
+          <PracticeCard key={p.path} item={p} onClick={() => navigate(p.path)} />
+        ))}
+      </Box>
+
       {!hasData ? (
         <Card sx={{ p: 5, textAlign: "center" }}>
           <Typography variant="h6" gutterBottom>No results yet</Typography>
@@ -136,10 +188,10 @@ export default function Dashboard() {
                       <stop offset="95%" stopColor={primary} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid vertical={false} stroke={gridStroke} />
-                  <XAxis dataKey="label" tick={{ fontSize: 12 }} tickFormatter={(v) => (v.length > 10 ? `${v.slice(0, 10)}…` : v)} />
-                  <YAxis domain={[0, 9]} tick={{ fontSize: 12 }} />
-                  <Tooltip />
+                  <CartesianGrid vertical={false} stroke={ct.grid.stroke} />
+                  <XAxis dataKey="label" tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} tickFormatter={(v) => (v.length > 10 ? `${v.slice(0, 10)}…` : v)} />
+                  <YAxis domain={[0, 9]} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
+                  <Tooltip {...ct.tooltip} />
                   <Area type="monotone" dataKey="band" stroke={primary} strokeWidth={2.5} fill="url(#bandGradient)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -155,9 +207,9 @@ export default function Dashboard() {
               <Box sx={{ height: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weakness} layout="vertical" margin={{ left: 16, right: 16, top: 4, bottom: 4 }}>
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12 }} tickFormatter={(v) => v.replace(/_/g, " ")} />
-                    <Tooltip formatter={(v) => [v, "mistakes"]} />
+                    <XAxis type="number" allowDecimals={false} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
+                    <YAxis type="category" dataKey="name" width={130} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} tickFormatter={(v) => v.replace(/_/g, " ")} />
+                    <Tooltip {...ct.tooltip} formatter={(v) => [v, "mistakes"]} cursor={{ fill: ct.grid.stroke }} />
                     <Bar dataKey="misses" fill={theme.palette.warning.main} radius={[0, 6, 6, 0]} barSize={18} />
                   </BarChart>
                 </ResponsiveContainer>
