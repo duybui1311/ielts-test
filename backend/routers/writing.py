@@ -2,14 +2,15 @@
 
 Test-version auth via the `X-User-Id` header.
 """
+from pathlib import Path
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models
+from backend.service import models, storage
 
 router = APIRouter(prefix="/api/writing", tags=["writing"])
 
@@ -71,6 +72,41 @@ def create_task(
     db.add(t)
     db.commit()
     return _task_out(t)
+
+
+@router.post("/tasks/{task_id}/image")
+async def upload_task_image(
+    task_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Teacher uploads a Task 1 chart/diagram; stored in Supabase Storage and
+    linked to the task via image_url."""
+    _require_teacher(db, x_user_id)
+    task = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    if not storage.is_configured():
+        raise HTTPException(
+            503,
+            "Image upload is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_KEY "
+            "to backend/.env, then restart the backend.",
+        )
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file.")
+    ext = Path(file.filename or "").suffix or ".png"
+    ctype = file.content_type or "image/png"
+    try:
+        url = storage.upload_bytes("writing-charts", data, ctype, ext)
+    except storage.StorageNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Upload failed: {e}")
+    task.image_url = url
+    db.commit()
+    return {"image_url": url}
 
 
 @router.post("/submissions")

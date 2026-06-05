@@ -24,6 +24,9 @@ code has been removed and remaining work targets IELTS only.
 - `backend/service/autograde.py` — MCQ + short-answer scoring, raw→band
   conversion, ErrorTag writes for analytics.
 - `backend/service/{config,database}.py` — settings + engine/`get_db`.
+- `backend/service/storage.py` — uploads bytes to Supabase Storage and returns the
+  public URL. Buckets: `writing-charts` (Task 1 images), `speaking-audio`. Needs
+  `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (service key is server-side only).
 - `frontend/src/App.jsx` — routes. Live student pages: `ExamList`, `ExamTake`,
   `ExamResults`, plus `dashboard`, `flashcard`, `teacherDashboard`, `CreateNewExam`,
   `login` and the shared `navbar`.

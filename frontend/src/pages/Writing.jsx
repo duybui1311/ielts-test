@@ -5,8 +5,17 @@ import {
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
-import { apiFetch } from "../api";
+import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
+import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
+
+function isTeacher() {
+  try {
+    return (localStorage.getItem("osce-role") || "").toLowerCase() === "teacher";
+  } catch {
+    return false;
+  }
+}
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
@@ -25,6 +34,13 @@ export default function Writing() {
       .then((r) => r.json())
       .then((d) => setSubs(Array.isArray(d) ? d : []))
       .catch(() => setSubs([]));
+  }, []);
+
+  const loadTasks = useCallback(() => {
+    apiFetch("/api/writing/tasks")
+      .then((r) => r.json())
+      .then((d) => setTasks(Array.isArray(d) ? d : []))
+      .catch(() => setTasks([]));
   }, []);
 
   useEffect(() => {
@@ -50,6 +66,8 @@ export default function Writing() {
   return (
     <Box>
       <PageHeader title="Writing" subtitle="Practise IELTS essays and get teacher feedback." />
+
+      {isTeacher() && <CreateTaskForm onCreated={loadTasks} />}
 
       <Typography variant="subtitle1" sx={{ mb: 1.5 }}>Tasks</Typography>
       {tasks.length === 0 ? (
@@ -113,6 +131,120 @@ export default function Writing() {
   );
 }
 
+function CreateTaskForm({ onCreated }) {
+  const [open, setOpen] = useState(false);
+  const [taskType, setTaskType] = useState("task1");
+  const [title, setTitle] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [timeLimit, setTimeLimit] = useState(20);
+  const [imageFile, setImageFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const reset = () => {
+    setTaskType("task1"); setTitle(""); setPrompt(""); setTimeLimit(20); setImageFile(null);
+  };
+
+  const save = async () => {
+    if (!title.trim() || !prompt.trim()) { setError("Title and prompt are required."); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const res = await apiFetch("/api/writing/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          task_type: taskType, title, prompt_md: prompt,
+          time_limit_min: Number(timeLimit) || 20,
+        }),
+      });
+      if (!res.ok) throw new Error("Could not create task.");
+      const task = await res.json();
+
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append("file", imageFile);
+        const uid = getUserId();
+        const up = await fetch(`${API_BASE}/api/writing/tasks/${task.id}/image`, {
+          method: "POST",
+          headers: uid ? { "X-User-Id": uid } : {},
+          body: fd,
+        });
+        if (!up.ok) {
+          const msg = await up.text().catch(() => "");
+          throw new Error(msg || "Task created, but the image upload failed.");
+        }
+      }
+
+      reset();
+      setOpen(false);
+      onCreated();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Button
+        variant="outlined"
+        startIcon={<AddPhotoAlternateRoundedIcon />}
+        onClick={() => setOpen(true)}
+        sx={{ mb: 3 }}
+      >
+        New writing task
+      </Button>
+    );
+  }
+
+  return (
+    <Card sx={{ p: 3, mb: 3 }}>
+      <Typography variant="subtitle1" sx={{ mb: 2 }}>New writing task</Typography>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      <Stack spacing={2}>
+        <TextField
+          select label="Type" value={taskType}
+          onChange={(e) => setTaskType(e.target.value)}
+          SelectProps={{ native: true }} sx={{ maxWidth: 280 }}
+        >
+          <option value="task1">Task 1 (chart/diagram)</option>
+          <option value="task2">Task 2 (essay)</option>
+        </TextField>
+        <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <TextField
+          label="Prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)}
+          multiline minRows={3}
+        />
+        <TextField
+          label="Time limit (min)" type="number" value={timeLimit}
+          onChange={(e) => setTimeLimit(e.target.value)} sx={{ maxWidth: 200 }}
+        />
+        <Box>
+          <Button component="label" variant="outlined" startIcon={<AddPhotoAlternateRoundedIcon />}>
+            {imageFile ? "Change chart image" : "Upload chart image"}
+            <input
+              type="file" accept="image/*" hidden
+              onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+            />
+          </Button>
+          {imageFile && (
+            <Typography variant="caption" sx={{ ml: 1.5 }}>{imageFile.name}</Typography>
+          )}
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Button variant="contained" disabled={saving} onClick={save}>
+            {saving ? "Saving…" : "Create task"}
+          </Button>
+          <Button disabled={saving} onClick={() => { reset(); setOpen(false); setError(""); }}>
+            Cancel
+          </Button>
+        </Stack>
+      </Stack>
+    </Card>
+  );
+}
+
 function Editor({ task, onDone }) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -170,10 +302,10 @@ function Editor({ task, onDone }) {
           <EditNoteRoundedIcon color="primary" />
           <Typography variant="subtitle1">Prompt</Typography>
         </Stack>
-        <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>{task.prompt_md}</Typography>
         {task.image_url && (
-          <Box component="img" src={task.image_url} alt="" sx={{ mt: 2, maxWidth: "100%", borderRadius: 2 }} />
+          <Box component="img" src={task.image_url} alt="Task chart" sx={{ mb: 2, maxWidth: "100%", borderRadius: 2 }} />
         )}
+        <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>{task.prompt_md}</Typography>
       </Card>
 
       <Card sx={{ p: 3 }}>

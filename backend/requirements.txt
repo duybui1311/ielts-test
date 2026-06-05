@@ -8,5 +8,6 @@ psycopg2-binary
 python-multipart
 anthropic
 google-genai
+supabase
 pypdf
 python-docx

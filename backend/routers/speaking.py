@@ -1,10 +1,10 @@
 """Speaking practice — students record audio (+ browser transcript), teachers
 grade manually and can replay the audio.
 
-Audio is saved under backend/uploads/speaking/ and served via the /uploads
-static mount (see backend/main.py). Test-version auth via `X-User-Id`.
+Audio is uploaded to the Supabase Storage "speaking-audio" bucket and the public
+URL is stored on the submission, so recordings persist online. Test-version auth
+via `X-User-Id`.
 """
-import uuid
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File, Form
@@ -12,11 +12,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models
+from backend.service import models, storage
 
 router = APIRouter(prefix="/api/speaking", tags=["speaking"])
-
-UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads" / "speaking"
 
 
 def _uid(x_user_id: Optional[str]) -> Optional[int]:
@@ -91,12 +89,16 @@ async def submit(
 
     audio_url = None
     if audio is not None:
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        ext = Path(audio.filename or "").suffix or ".webm"
-        fname = f"{uuid.uuid4().hex}{ext}"
         data = await audio.read()
-        (UPLOAD_DIR / fname).write_bytes(data)
-        audio_url = f"/uploads/speaking/{fname}"
+        if data:
+            ext = Path(audio.filename or "").suffix or ".webm"
+            ctype = audio.content_type or "audio/webm"
+            try:
+                audio_url = storage.upload_bytes("speaking-audio", data, ctype, ext)
+            except storage.StorageNotConfigured as e:
+                raise HTTPException(503, str(e))
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(502, f"Audio upload failed: {e}")
 
     sub = models.SpeakingSubmission(
         task_id=task_id, user_id=uid, transcript=transcript or None,
