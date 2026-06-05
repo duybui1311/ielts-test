@@ -7,5 +7,6 @@ bcrypt
 psycopg2-binary
 python-multipart
 anthropic
+google-genai
 pypdf
 python-docx

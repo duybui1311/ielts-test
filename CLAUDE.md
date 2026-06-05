@@ -30,6 +30,22 @@ code has been removed and remaining work targets IELTS only.
 
 ## Core flows
 - **Test import/export** — `POST /api/tests/import`, `GET /api/tests/{id}/export`.
+- **AI test importer** — `POST /api/import/ai` (`backend/routers/ai_import.py`).
+  Teachers upload a PDF/Word/image; the chosen LLM returns the `build_ielts_test`
+  JSON schema, which the frontend loads into the visual builder for review before
+  saving. The provider is chosen with `LLM_PROVIDER` (default `gemini`):
+  - **`gemini` (recommended free online option)** — Google Gemini via the
+    `google-genai` SDK. Multimodal: PDFs/images are sent as raw bytes (no OCR/text
+    pre-extraction — it reads charts, scans and layout natively) with JSON-mode
+    `response_schema`. Needs `GEMINI_API_KEY`; `GEMINI_MODEL` defaults to
+    `gemini-2.5-flash`. Free tier is rate-limited (~1500 req/day), so it's fine
+    for test/low-volume use only.
+  - **`claude`** — Anthropic Claude via tool-use. Images sent as base64; other
+    files have text extracted locally first. Needs `ANTHROPIC_API_KEY`.
+  - **`local`** — no external API; extracts text and returns it as a single
+    reading section for the teacher to finish by hand (can't read images).
+  Each provider returns the same shape; missing API keys return 503 with a
+  "set up AI import" message.
 - **Auto-grade** — `POST /api/autograde/exam/{id}` and `/station/{id}`. MCQ matches
   `correct_index`; short answers normalise and match `accept_answers`; raw score
   scales to /40 then a band lookup table. Writing/Speaking are skipped.
