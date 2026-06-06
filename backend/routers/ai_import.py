@@ -25,12 +25,12 @@ import io
 import time
 import json
 import base64
-from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import require_role
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -146,19 +146,6 @@ def _to_gemini_schema(node):
 _GEMINI_SCHEMA = _to_gemini_schema(TEST_TOOL["input_schema"])
 
 
-def _uid(x_user_id: Optional[str]) -> Optional[int]:
-    try:
-        return int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
-    uid = _uid(x_user_id)
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role != models.UserRole.teacher:
-        raise HTTPException(403, "Teachers only.")
-    return uid
 
 
 def _extract_text(filename: str, data: bytes) -> str:
@@ -409,10 +396,8 @@ _PROVIDERS = {"gemini": _run_gemini, "claude": _run_claude, "local": _run_local}
 async def ai_import(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(require_role("teacher", "admin")),
 ):
-    _require_teacher(db, x_user_id)
-
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
     run = _PROVIDERS.get(provider)
     if run is None:

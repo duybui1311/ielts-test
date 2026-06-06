@@ -73,11 +73,15 @@ code has been removed and remaining work targets IELTS only.
 
 ## Status & boundaries
 - **Test version.** Schema is created with `create_all` (no Alembic yet).
-- **Auth is a placeholder** — `POST /api/auth/login` verifies bcrypt and returns
-  `token: "test-{user_id}"`; the frontend passes identity via the `X-User-Id`
-  header and routers trust it. No JWT, no route guards. **Replace with JWT before
-  public launch.**
-- **AI Writing/Speaking grading is future work**, not implemented.
+- **Auth is real JWT.** `POST /api/auth/login` and `/register` verify bcrypt and
+  return a signed token (`user_id`, `role`, 24h expiry) read from `JWT_SECRET`.
+  Identity is derived only from the verified `Authorization: Bearer` token via the
+  `get_current_user` / `require_role("teacher"|"admin")` dependencies in
+  `backend/service/auth_deps.py` — never from a client header. `/api/health` and
+  `/api/auth/*` are public; everything else requires a token. The frontend stores
+  the JWT and attaches it on every request (`frontend/src/api.js`), redirecting to
+  `/login` on a 401.
+- **AI Writing/Speaking grading** is implemented (Gemini) with teacher review.
 
 ## When changing things
 - Keep the `sub_skill` vocab a closed list, or analytics fragments.

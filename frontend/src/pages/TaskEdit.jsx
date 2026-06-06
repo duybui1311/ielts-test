@@ -5,7 +5,7 @@ import {
 } from "@mui/material";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiFetch, API_BASE, getUserId } from "../api";
+import { apiFetch, API_BASE, authHeaders } from "../api";
 import { PageHeader } from "../component/ui";
 
 export default function TaskEdit() {
@@ -56,10 +56,9 @@ export default function TaskEdit() {
     if (!imageFile) return;
     const fd = new FormData();
     fd.append("file", imageFile);
-    const uid = getUserId();
     const res = await fetch(`${API_BASE}/api/writing/tasks/${taskIdForImage}/image`, {
       method: "POST",
-      headers: uid ? { "X-User-Id": uid } : {},
+      headers: authHeaders(),
       body: fd,
     });
     if (!res.ok) {

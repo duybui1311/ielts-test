@@ -1,28 +1,14 @@
-"""Flashcard decks, cards and reviews — owner-scoped via the `X-User-Id` header."""
-from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException
+"""Flashcard decks, cards and reviews — owner-scoped via the verified JWT."""
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import get_current_user
 
 router = APIRouter(prefix="/api/flashcards", tags=["flashcards"])
-
-
-def _user_id(x_user_id: Optional[str]) -> Optional[int]:
-    try:
-        return int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _require_uid(x_user_id: Optional[str]) -> int:
-    uid = _user_id(x_user_id)
-    if not uid:
-        raise HTTPException(401, "Sign in required.")
-    return uid
 
 
 class DeckIn(BaseModel):
@@ -42,11 +28,9 @@ class ReviewIn(BaseModel):
 @router.get("/decks")
 def list_decks(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _user_id(x_user_id)
-    if not uid:
-        return []
+    uid = user.id
     counts = dict(
         db.query(models.Flashcard.deck_id, func.count(models.Flashcard.id))
         .group_by(models.Flashcard.deck_id)
@@ -68,9 +52,9 @@ def list_decks(
 def list_cards(
     deck_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _require_uid(x_user_id)
+    uid = user.id
     deck = (
         db.query(models.FlashcardDeck)
         .filter(models.FlashcardDeck.id == deck_id, models.FlashcardDeck.owner_id == uid)
@@ -91,9 +75,9 @@ def list_cards(
 def create_deck(
     payload: DeckIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _require_uid(x_user_id)
+    uid = user.id
     deck = models.FlashcardDeck(owner_id=uid, name=payload.name.strip() or "Untitled deck")
     db.add(deck)
     db.commit()
@@ -105,9 +89,9 @@ def add_card(
     deck_id: int,
     payload: CardIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _require_uid(x_user_id)
+    uid = user.id
     deck = (
         db.query(models.FlashcardDeck)
         .filter(models.FlashcardDeck.id == deck_id, models.FlashcardDeck.owner_id == uid)
@@ -125,9 +109,9 @@ def add_card(
 def review_card(
     payload: ReviewIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _require_uid(x_user_id)
+    uid = user.id
     card = db.query(models.Flashcard).filter(models.Flashcard.id == payload.card_id).first()
     if not card:
         raise HTTPException(404, "Card not found")

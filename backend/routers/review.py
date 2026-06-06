@@ -1,32 +1,20 @@
 """Teacher review queue — grade pending Writing and Speaking submissions.
 
-Test-version auth via the `X-User-Id` header; teacher role required.
+Identity comes from the verified JWT; teacher/admin role required for grading.
 """
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import get_current_user, require_role
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
-
-def _uid(x_user_id: Optional[str]) -> Optional[int]:
-    try:
-        return int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
-    uid = _uid(x_user_id)
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
-        raise HTTPException(403, "Teachers only.")
-    return uid
+_teacher = require_role("teacher", "admin")
 
 
 class GradeIn(BaseModel):
@@ -39,9 +27,8 @@ class GradeIn(BaseModel):
 @router.get("/queue")
 def queue(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    _require_teacher(db, x_user_id)
     names = {
         u.id: (u.full_name or u.username or u.email or f"User {u.id}")
         for u in db.query(models.User).all()
@@ -101,9 +88,9 @@ def grade_writing(
     submission_id: int,
     payload: GradeIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    uid = _require_teacher(db, x_user_id)
+    uid = user.id
     s = db.query(models.WritingSubmission).filter(models.WritingSubmission.id == submission_id).first()
     if not s:
         raise HTTPException(404, "Submission not found")
@@ -126,9 +113,9 @@ def grade_speaking(
     submission_id: int,
     payload: GradeIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    uid = _require_teacher(db, x_user_id)
+    uid = user.id
     s = db.query(models.SpeakingSubmission).filter(models.SpeakingSubmission.id == submission_id).first()
     if not s:
         raise HTTPException(404, "Submission not found")
@@ -151,9 +138,8 @@ def grade_speaking(
 @router.get("/count")
 def pending_count(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    _require_teacher(db, x_user_id)
     pending = ["submitted", "ai_graded"]
     n = (
         db.query(models.WritingSubmission)
@@ -188,18 +174,16 @@ def _comment_out(c: models.WritingComment) -> dict:
 def list_comments(
     submission_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
     """List inline comments. Visible to the teacher and to the owning student."""
-    uid = _uid(x_user_id)
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
     sub = db.query(models.WritingSubmission).filter(
         models.WritingSubmission.id == submission_id
     ).first()
     if not sub:
         raise HTTPException(404, "Submission not found")
-    is_teacher = user and user.role in (models.UserRole.teacher, models.UserRole.admin)
-    if not user or (not is_teacher and sub.user_id != user.id):
+    is_teacher = user.role in (models.UserRole.teacher, models.UserRole.admin)
+    if not is_teacher and sub.user_id != user.id:
         raise HTTPException(403, "Not allowed.")
     rows = (
         db.query(models.WritingComment)
@@ -215,9 +199,8 @@ def add_comment(
     submission_id: int,
     payload: CommentIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    uid = _require_teacher(db, x_user_id)
     sub = db.query(models.WritingSubmission).filter(
         models.WritingSubmission.id == submission_id
     ).first()
@@ -231,7 +214,7 @@ def add_comment(
         end_offset=payload.end_offset,
         quote=payload.quote,
         comment=payload.comment.strip(),
-        created_by=uid,
+        created_by=user.id,
     )
     db.add(c)
     db.commit()
@@ -242,9 +225,8 @@ def add_comment(
 def delete_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    _require_teacher(db, x_user_id)
     c = db.query(models.WritingComment).filter(models.WritingComment.id == comment_id).first()
     if not c:
         raise HTTPException(404, "Comment not found")

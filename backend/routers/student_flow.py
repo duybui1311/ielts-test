@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.autograde import autograde_exam_attempt
+from backend.service.auth_deps import get_current_user
 
 router = APIRouter(tags=["student"])
+
+
+def _owns_or_teacher(attempt: models.ExamAttempt, user: models.User) -> bool:
+    return attempt.user_id == user.id or user.role in (models.UserRole.teacher, models.UserRole.admin)
 
 
 def _build_content(exam, attempt_id, db):
@@ -61,7 +66,7 @@ def _build_content(exam, attempt_id, db):
 # ── List exams ──────────────────────────────────────────────────────────────
 
 @router.get("/api/exams")
-def list_exams(db: Session = Depends(get_db)):
+def list_exams(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     exams = db.query(models.Exam).order_by(models.Exam.created_at.desc()).all()
     result = []
     for exam in exams:
@@ -82,11 +87,15 @@ def list_exams(db: Session = Depends(get_db)):
 
 class StartIn(BaseModel):
     exam_id: int
-    user_id: int
+    user_id: Optional[int] = None      # ignored — identity comes from the token
 
 
 @router.post("/api/attempts/start")
-def start_attempt(payload: StartIn, db: Session = Depends(get_db)):
+def start_attempt(
+    payload: StartIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
     if not exam:
         raise HTTPException(404, "Exam not found")
@@ -95,7 +104,7 @@ def start_attempt(payload: StartIn, db: Session = Depends(get_db)):
         db.query(models.ExamAttempt)
         .filter(
             models.ExamAttempt.exam_id == payload.exam_id,
-            models.ExamAttempt.user_id == payload.user_id,
+            models.ExamAttempt.user_id == user.id,
         )
         .first()
     )
@@ -104,7 +113,7 @@ def start_attempt(payload: StartIn, db: Session = Depends(get_db)):
     else:
         attempt = models.ExamAttempt(
             exam_id=payload.exam_id,
-            user_id=payload.user_id,
+            user_id=user.id,
             status=models.AttemptStatus.draft,
         )
         db.add(attempt)
@@ -131,12 +140,18 @@ def start_attempt(payload: StartIn, db: Session = Depends(get_db)):
 # ── Fetch content for an existing attempt (page refresh) ───────────────────
 
 @router.get("/api/attempts/{attempt_id}/content")
-def get_content(attempt_id: int, db: Session = Depends(get_db)):
+def get_content(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     attempt = db.query(models.ExamAttempt).filter(
         models.ExamAttempt.id == attempt_id
     ).first()
     if not attempt:
         raise HTTPException(404, "Attempt not found")
+    if not _owns_or_teacher(attempt, user):
+        raise HTTPException(403, "Not allowed.")
     exam = db.query(models.Exam).filter(models.Exam.id == attempt.exam_id).first()
     content = _build_content(exam, attempt.id, db)
     return {
@@ -158,7 +173,17 @@ class AnswerIn(BaseModel):
 
 
 @router.post("/api/attempts/{attempt_id}/answer")
-def save_answer(attempt_id: int, payload: AnswerIn, db: Session = Depends(get_db)):
+def save_answer(
+    attempt_id: int,
+    payload: AnswerIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    ea = db.query(models.ExamAttempt).filter(models.ExamAttempt.id == attempt_id).first()
+    if not ea:
+        raise HTTPException(404, "Attempt not found")
+    if not _owns_or_teacher(ea, user):
+        raise HTTPException(403, "Not allowed.")
     q = db.query(models.Question).filter(
         models.Question.id == payload.question_id
     ).first()
@@ -202,12 +227,18 @@ def save_answer(attempt_id: int, payload: AnswerIn, db: Session = Depends(get_db
 # ── Submit + autograde ──────────────────────────────────────────────────────
 
 @router.post("/api/attempts/{attempt_id}/submit")
-def submit_attempt(attempt_id: int, db: Session = Depends(get_db)):
+def submit_attempt(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     ea = db.query(models.ExamAttempt).filter(
         models.ExamAttempt.id == attempt_id
     ).first()
     if not ea:
         raise HTTPException(404, "Attempt not found")
+    if not _owns_or_teacher(ea, user):
+        raise HTTPException(403, "Not allowed.")
 
     if ea.status == models.AttemptStatus.graded:
         return {
@@ -236,12 +267,18 @@ def submit_attempt(attempt_id: int, db: Session = Depends(get_db)):
 # ── Results ─────────────────────────────────────────────────────────────────
 
 @router.get("/api/attempts/{attempt_id}/results")
-def get_results(attempt_id: int, db: Session = Depends(get_db)):
+def get_results(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     ea = db.query(models.ExamAttempt).filter(
         models.ExamAttempt.id == attempt_id
     ).first()
     if not ea:
         raise HTTPException(404, "Attempt not found")
+    if not _owns_or_teacher(ea, user):
+        raise HTTPException(403, "Not allowed.")
 
     sections = []
     for sa in sorted(ea.station_attempts, key=lambda x: x.station.position):

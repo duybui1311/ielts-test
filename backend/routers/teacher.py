@@ -1,26 +1,19 @@
 """Teacher dashboard — classes, exams and recent student submissions.
 
-Owner-scoped via the `X-User-Id` header (test-version auth). Degrades to empty
+Owner-scoped via the verified JWT (teacher/admin). Degrades to empty
 structures so the page renders for a teacher with no classes yet.
 """
-from typing import Optional
 from collections import defaultdict
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import require_role
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"])
 
 _GRADED = (models.AttemptStatus.submitted, models.AttemptStatus.graded)
-
-
-def _user_id(x_user_id: Optional[str]) -> Optional[int]:
-    try:
-        return int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _avg(values):
@@ -31,11 +24,9 @@ def _avg(values):
 @router.get("/classes")
 def teacher_classes(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(require_role("teacher", "admin")),
 ):
-    uid = _user_id(x_user_id)
-    if not uid:
-        return []
+    uid = user.id
     classes = (
         db.query(models.Class)
         .filter(models.Class.owner_id == uid)
@@ -48,18 +39,15 @@ def teacher_classes(
 @router.get("/dashboard")
 def teacher_dashboard(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(require_role("teacher", "admin")),
 ):
-    uid = _user_id(x_user_id)
+    uid = user.id
     empty = {
         "kpis": {"classes": 0, "students": 0, "exams": 0, "to_review": 0},
         "classes": [],
         "band_trend": [],
         "recent_submissions": [],
     }
-    if not uid:
-        return empty
-
     classes = db.query(models.Class).filter(models.Class.owner_id == uid).all()
     if not classes:
         return empty

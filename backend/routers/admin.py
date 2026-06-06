@@ -1,42 +1,31 @@
 """Admin area — site-wide management for the single admin role.
 
-Admin is identified by the `X-User-Id` header pointing at a user whose role is
-`admin` (test-version auth). Capabilities:
+Admin is identified by the verified JWT (role must be `admin`, enforced by the
+`require_role("admin")` dependency). Capabilities:
 - Site overview counts.
 - User management: list, change role, activate/deactivate, delete (guarded).
 - Test list with attempt counts (delete reuses /api/tests/{id}).
 
-No JWT yet — replace the header trust with real auth before production.
+Identity and role come from the verified JWT (never a client-supplied header).
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import require_role
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-
-
-def _require_admin(db: Session, x_user_id: Optional[str]) -> models.User:
-    try:
-        uid = int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        uid = None
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role != models.UserRole.admin:
-        raise HTTPException(403, "Admins only.")
-    return user
 
 
 @router.get("/overview")
 def overview(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    admin: models.User = Depends(require_role("admin")),
 ):
-    _require_admin(db, x_user_id)
     users = db.query(models.User).all()
     by_role = {"student": 0, "teacher": 0, "admin": 0}
     active = 0
@@ -61,9 +50,8 @@ def overview(
 @router.get("/users")
 def list_users(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    admin: models.User = Depends(require_role("admin")),
 ):
-    _require_admin(db, x_user_id)
     # attempt counts per user (one query)
     counts = dict(
         db.query(models.ExamAttempt.user_id, func.count(models.ExamAttempt.id))
@@ -97,9 +85,8 @@ def update_user(
     user_id: int,
     payload: UserPatchIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    admin: models.User = Depends(require_role("admin")),
 ):
-    admin = _require_admin(db, x_user_id)
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -129,11 +116,10 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    admin: models.User = Depends(require_role("admin")),
 ):
     """Hard-delete a user — only when they own no content and have no attempts.
     Otherwise the admin should deactivate them instead (keeps data intact)."""
-    admin = _require_admin(db, x_user_id)
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -172,9 +158,8 @@ def delete_user(
 @router.get("/tests")
 def list_tests(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    admin: models.User = Depends(require_role("admin")),
 ):
-    _require_admin(db, x_user_id)
     exams = db.query(models.Exam).order_by(models.Exam.created_at.desc()).all()
     owners = {
         u.id: (u.full_name or u.username or u.email or f"User {u.id}")

@@ -8,7 +8,7 @@ import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import StopRoundedIcon from "@mui/icons-material/StopRounded";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, API_BASE, getUserId } from "../api";
+import { apiFetch, API_BASE, authHeaders } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
 
 const SR = typeof window !== "undefined"
@@ -188,10 +188,9 @@ function Recorder({ task, onDone }) {
       fd.append("task_id", String(task.id));
       fd.append("transcript", transcript);
       if (blobRef.current) fd.append("audio", blobRef.current, "answer.webm");
-      const uid = getUserId();
       const res = await fetch(`${API_BASE}/api/speaking/submissions`, {
         method: "POST",
-        headers: uid ? { "X-User-Id": uid } : {},
+        headers: authHeaders(),
         body: fd,
       });
       if (!res.ok) throw new Error("Submit failed");

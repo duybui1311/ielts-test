@@ -21,5 +21,8 @@ class Settings:
         # When true, students see AI grades immediately (no teacher approval needed).
         self.AI_GRADES_AUTO_VISIBLE = os.getenv("AI_GRADES_AUTO_VISIBLE", "false").lower() in ("1", "true", "yes")
 
+        # Secret used to sign/verify JWT access tokens. Required for auth.
+        self.JWT_SECRET = os.getenv("JWT_SECRET", "")
+
 
 settings = Settings()

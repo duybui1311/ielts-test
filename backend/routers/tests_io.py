@@ -1,13 +1,16 @@
 from pathlib import Path
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
 import bcrypt
 from backend.service.database import get_db
 from backend.service import models, storage
+from backend.service.auth_deps import get_current_user, require_role
 
 router = APIRouter(prefix="/api/tests", tags=["tests"])
+
+_teacher = require_role("teacher", "admin")
 
 # kind -> (Supabase Storage bucket, default extension, default content-type)
 _UPLOAD_KINDS = {
@@ -16,29 +19,16 @@ _UPLOAD_KINDS = {
 }
 
 
-def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
-    """Allow teachers and admins to author/manage tests."""
-    try:
-        uid = int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        uid = None
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
-        raise HTTPException(403, "Teachers only.")
-    return uid
-
-
 @router.post("/upload")
 async def upload_media(
     kind: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Upload builder media (a Writing chart image or a Listening audio file) to
     Supabase Storage and return its public URL for the section's image_url /
     audio_url. Teacher-only."""
-    _require_teacher(db, x_user_id)
     spec = _UPLOAD_KINDS.get(kind)
     if not spec:
         raise HTTPException(400, "kind must be 'image' or 'audio'.")
@@ -90,21 +80,26 @@ class TestIn(BaseModel):
     reading_min: int = 0
     access_code: str = "1234"
     class_id: Optional[int] = None
-    created_by: int                             # teacher id (until auth is wired)
+    created_by: Optional[int] = None            # ignored — author comes from the token
     sections: List[SectionIn]
 
 
 @router.post("/import")
-def import_test(payload: TestIn, db: Session = Depends(get_db)):
+def import_test(
+    payload: TestIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(_teacher),
+):
+    created_by = user.id
     class_id = payload.class_id
     if not class_id:
         klass = (
             db.query(models.Class)
-            .filter(models.Class.name == "Sandbox", models.Class.owner_id == payload.created_by)
+            .filter(models.Class.name == "Sandbox", models.Class.owner_id == created_by)
             .first()
         )
         if not klass:
-            klass = models.Class(name="Sandbox", owner_id=payload.created_by)
+            klass = models.Class(name="Sandbox", owner_id=created_by)
             db.add(klass)
             db.flush()
         class_id = klass.id
@@ -119,13 +114,13 @@ def import_test(payload: TestIn, db: Session = Depends(get_db)):
         time_limit_min=payload.time_limit_min,
         reading_min=payload.reading_min,
         access_code_hash=code_hash,
-        created_by=payload.created_by,
+        created_by=created_by,
     )
     db.add(exam)
     db.flush()
 
     for s in payload.sections:
-        case = models.Case(title=s.title, body_md=s.passage_md, created_by=payload.created_by)
+        case = models.Case(title=s.title, body_md=s.passage_md, created_by=created_by)
         db.add(case)
         db.flush()
         station = models.Station(
@@ -246,10 +241,9 @@ def rename_test(
     exam_id: int,
     payload: TestPatchIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Quick metadata edit (rename, difficulty, time limit). Teacher/admin."""
-    _require_teacher(db, x_user_id)
     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(404, "Exam not found")
@@ -271,11 +265,10 @@ def update_test(
     exam_id: int,
     payload: TestUpdateIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Replace an exam's content (builder edit). Blocked once students have
     attempted it, to keep their results consistent."""
-    _require_teacher(db, x_user_id)
     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(404, "Exam not found")
@@ -297,10 +290,9 @@ def update_test(
 def delete_test(
     exam_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Delete a test and all of its attempts/answers. Teacher/admin."""
-    _require_teacher(db, x_user_id)
     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(404, "Exam not found")
@@ -310,7 +302,12 @@ def delete_test(
 
 
 @router.get("/{exam_id}/export")
-def export_test(exam_id: int, db: Session = Depends(get_db)):
+def export_test(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(_teacher),
+):
+    """Export a test including its answer key — teacher/admin only."""
     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(404, "Exam not found")

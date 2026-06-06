@@ -1,44 +1,27 @@
 """Student dashboard — aggregates the signed-in student's own activity.
 
-Reads the user id from the `X-User-Id` header (test-version auth). Every query
-degrades to empty/zero so the page renders cleanly for a brand-new account.
+The student is taken from the verified JWT. Every query degrades to empty/zero
+so the page renders cleanly for a brand-new account.
 """
-from typing import Optional
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 _GRADED = (models.AttemptStatus.submitted, models.AttemptStatus.graded)
 
 
-def _user_id(x_user_id: Optional[str]) -> Optional[int]:
-    try:
-        return int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        return None
-
-
 @router.get("")
 def student_dashboard(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _user_id(x_user_id)
-    empty = {
-        "kpis": {"tests_taken": 0, "avg_band": None, "questions_answered": 0, "top_weakness": None},
-        "band_trend": [],
-        "recent": [],
-        "weakness": [],
-        "productive": [],
-    }
-    if not uid:
-        return empty
-
+    uid = user.id
     attempts = (
         db.query(models.ExamAttempt)
         .filter(models.ExamAttempt.user_id == uid)

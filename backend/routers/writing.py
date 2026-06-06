@@ -1,19 +1,21 @@
-"""Writing practice — students submit essays, teachers grade them manually.
+"""Writing practice — students submit essays; teachers/AI grade them.
 
-Test-version auth via the `X-User-Id` header.
+Identity comes from the verified JWT (backend.service.auth_deps).
 """
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models, storage, ai_grading
 from backend.service.config import settings
+from backend.service.auth_deps import get_current_user, require_role
 
 router = APIRouter(prefix="/api/writing", tags=["writing"])
+
+_teacher = require_role("teacher", "admin")
 
 
 def _write_ai_error_tags(db: Session, *, user_id: int, skill: str, tags: list) -> None:
@@ -25,21 +27,6 @@ def _write_ai_error_tags(db: Session, *, user_id: int, skill: str, tags: list) -
             user_id=user_id, skill=skill, question_type=skill,
             sub_skill=(t.get("category") or None),
         ))
-
-
-def _uid(x_user_id: Optional[str]) -> Optional[int]:
-    try:
-        return int(x_user_id) if x_user_id else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
-    uid = _uid(x_user_id)
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
-        raise HTTPException(403, "Teachers only.")
-    return uid
 
 
 class TaskIn(BaseModel):
@@ -65,13 +52,13 @@ def _task_out(t: models.WritingTask):
 
 
 @router.get("/tasks")
-def list_tasks(db: Session = Depends(get_db)):
+def list_tasks(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     tasks = db.query(models.WritingTask).order_by(models.WritingTask.created_at.desc()).all()
     return [_task_out(t) for t in tasks]
 
 
 @router.get("/tasks/{task_id}")
-def get_task(task_id: int, db: Session = Depends(get_db)):
+def get_task(task_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     t = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")
@@ -82,13 +69,12 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 def create_task(
     payload: TaskIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    uid = _require_teacher(db, x_user_id)
     t = models.WritingTask(
         task_type=payload.task_type, title=payload.title.strip(),
         prompt_md=payload.prompt_md, image_url=payload.image_url,
-        time_limit_min=payload.time_limit_min, min_words=payload.min_words, created_by=uid,
+        time_limit_min=payload.time_limit_min, min_words=payload.min_words, created_by=user.id,
     )
     db.add(t)
     db.commit()
@@ -108,9 +94,8 @@ def update_task(
     task_id: int,
     payload: TaskPatchIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
-    _require_teacher(db, x_user_id)
     t = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")
@@ -134,10 +119,9 @@ def update_task(
 def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Delete a writing task and its submissions/comments. Teacher/admin."""
-    _require_teacher(db, x_user_id)
     t = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")
@@ -159,11 +143,10 @@ async def upload_task_image(
     task_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Teacher uploads a Task 1 chart/diagram; stored in Supabase Storage and
     linked to the task via image_url."""
-    _require_teacher(db, x_user_id)
     task = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
     if not task:
         raise HTTPException(404, "Task not found")
@@ -193,16 +176,13 @@ async def upload_task_image(
 def submit(
     payload: SubmissionIn,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _uid(x_user_id)
-    if not uid:
-        raise HTTPException(401, "Sign in required.")
     if not db.query(models.WritingTask).filter(models.WritingTask.id == payload.task_id).first():
         raise HTTPException(404, "Task not found")
     text = payload.response_text or ""
     sub = models.WritingSubmission(
-        task_id=payload.task_id, user_id=uid,
+        task_id=payload.task_id, user_id=user.id,
         response_text=text, word_count=len(text.split()),
         status="submitted",
     )
@@ -215,11 +195,10 @@ def submit(
 def ai_grade_submission(
     submission_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(_teacher),
 ):
     """Run Gemini grading and store a DRAFT (status 'ai_graded', not yet approved).
     Teacher-only — students never see the result until a teacher approves it."""
-    _require_teacher(db, x_user_id)
     s = db.query(models.WritingSubmission).filter(models.WritingSubmission.id == submission_id).first()
     if not s:
         raise HTTPException(404, "Submission not found")
@@ -249,16 +228,14 @@ def ai_grade_submission(
 def get_submission(
     submission_id: int,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
     """Full detail for one submission — the owning student or a teacher/admin."""
-    uid = _uid(x_user_id)
-    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
     s = db.query(models.WritingSubmission).filter(models.WritingSubmission.id == submission_id).first()
     if not s:
         raise HTTPException(404, "Submission not found")
-    is_teacher = user and user.role in (models.UserRole.teacher, models.UserRole.admin)
-    if not user or (not is_teacher and s.user_id != user.id):
+    is_teacher = user.role in (models.UserRole.teacher, models.UserRole.admin)
+    if not is_teacher and s.user_id != user.id:
         raise HTTPException(403, "Not allowed.")
     visible = is_teacher or s.approved_by_teacher or settings.AI_GRADES_AUTO_VISIBLE
     comments = [
@@ -288,11 +265,9 @@ def get_submission(
 @router.get("/submissions")
 def my_submissions(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: models.User = Depends(get_current_user),
 ):
-    uid = _uid(x_user_id)
-    if not uid:
-        return []
+    uid = user.id
     subs = (
         db.query(models.WritingSubmission)
         .filter(models.WritingSubmission.user_id == uid)

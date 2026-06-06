@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import bcrypt
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.auth_deps import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -69,12 +70,11 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials.",
         )
-    # TEST-VERSION token only. Replace with a signed JWT before production.
     return LoginOut(
         user_id=user.id,
         name=user.full_name,
         role=user.role.value,
-        token=f"test-{user.id}",
+        token=create_access_token(user.id, user.role.value),
     )
 
 
@@ -118,5 +118,5 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> LoginOut:
         user_id=user.id,
         name=user.full_name,
         role=user.role.value,
-        token=f"test-{user.id}",
+        token=create_access_token(user.id, user.role.value),
     )

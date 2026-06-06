@@ -11,7 +11,7 @@ import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import TipsAndUpdatesRoundedIcon from "@mui/icons-material/TipsAndUpdatesRounded";
 import { useNavigate, useLocation } from "react-router-dom";
-import { apiFetch, getUserId, API_BASE } from "../api";
+import { apiFetch, getUserId, API_BASE, authHeaders } from "../api";
 import { PageHeader, SkillChip } from "../component/ui";
 
 /** Map the AI importer's TestIn-shaped JSON into the builder's section state. */
@@ -119,7 +119,7 @@ export default function CreateNewExam() {
       fd.append("file", importFile);
       const res = await fetch(`${API_BASE}/api/import/ai`, {
         method: "POST",
-        headers: { "X-User-Id": getUserId() || "" },
+        headers: authHeaders(),
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
@@ -212,7 +212,7 @@ export default function CreateNewExam() {
       fd.append("file", file);
       const res = await fetch(`${API_BASE}/api/tests/upload?kind=${kind}`, {
         method: "POST",
-        headers: { "X-User-Id": getUserId() || "" },
+        headers: authHeaders(),
         body: fd,
       });
       const data = await res.json().catch(() => ({}));

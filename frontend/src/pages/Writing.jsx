@@ -8,7 +8,7 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, API_BASE, getUserId } from "../api";
+import { apiFetch, API_BASE, authHeaders } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
 
 function isTeacher() {
@@ -163,10 +163,9 @@ function CreateTaskForm({ onCreated }) {
       if (imageFile) {
         const fd = new FormData();
         fd.append("file", imageFile);
-        const uid = getUserId();
         const up = await fetch(`${API_BASE}/api/writing/tasks/${task.id}/image`, {
           method: "POST",
-          headers: uid ? { "X-User-Id": uid } : {},
+          headers: authHeaders(),
           body: fd,
         });
         if (!up.ok) {
