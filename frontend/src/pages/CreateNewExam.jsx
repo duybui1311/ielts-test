@@ -84,14 +84,19 @@ export default function CreateNewExam() {
     () => new URLSearchParams(location.search).get("edit"),
     [location.search]
   );
+  const skillParam = React.useMemo(() => {
+    const s = new URLSearchParams(location.search).get("skill");
+    return ["reading", "listening"].includes(s) ? s : "";
+  }, [location.search]);
 
+  const [examSkill, setExamSkill] = useState(skillParam);   // one skill per test
   const [name, setName] = useState("");
   const [difficulty, setDifficulty] = useState("medium");
   const [timeLimit, setTimeLimit] = useState(40);
   const [accessCode, setAccessCode] = useState("1234");
   const [classId, setClassId] = useState("");
   const [classes, setClasses] = useState([]);
-  const [sections, setSections] = useState([newSection(1)]);
+  const [sections, setSections] = useState(() => [{ ...newSection(1), skill: skillParam || "reading" }]);
   const [loadingExam, setLoadingExam] = useState(!!editId);
   const [detailsOpen, setDetailsOpen] = useState(true);
 
@@ -152,7 +157,10 @@ export default function CreateNewExam() {
         if (data.difficulty) setDifficulty(data.difficulty);
         if (data.time_limit_min) setTimeLimit(data.time_limit_min);
         const secs = aiToSections(data);
-        if (secs.length) setSections(secs);
+        if (secs.length) {
+          setSections(secs);
+          setExamSkill(secs[0].skill || "reading");
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingExam(false));
@@ -172,7 +180,7 @@ export default function CreateNewExam() {
     );
 
   const addSection = () =>
-    setSections((s) => [...s, newSection(s.length + 1)]);
+    setSections((s) => [...s, { ...newSection(s.length + 1), skill: examSkill || "reading" }]);
   const removeSection = (si) =>
     setSections((s) => s.filter((_, i) => i !== si).map((sec, i) => ({ ...sec, position: i + 1 })));
 
@@ -339,13 +347,41 @@ export default function CreateNewExam() {
     return <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}><CircularProgress /></Box>;
   }
 
+  // Skill-first: choose Reading or Listening before building the test.
+  if (!editId && !examSkill) {
+    return (
+      <Box sx={{ maxWidth: 720 }}>
+        <PageHeader title="Create Test" subtitle="Which skill is this test for?" />
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
+          {[
+            ["reading", "Reading", "A passage with question types (MCQ, gap-fill, matching…)."],
+            ["listening", "Listening", "Audio with question types."],
+          ].map(([k, label, desc]) => (
+            <Card
+              key={k}
+              onClick={() => { setExamSkill(k); setSections([{ ...newSection(1), skill: k }]); }}
+              sx={{ p: 3, cursor: "pointer", "&:hover": { boxShadow: 4 } }}
+            >
+              <SkillChip skill={k} />
+              <Typography variant="h6" sx={{ mt: 1 }}>{label}</Typography>
+              <Typography variant="body2" color="text.secondary">{desc}</Typography>
+            </Card>
+          ))}
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>
+          Writing and Speaking are created as tasks — use “Create ▾” on Test Manage.
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ maxWidth: 900 }}>
       <PageHeader
-        title={editId ? "Edit Exam" : "Create Exam"}
+        title={`${editId ? "Edit" : "Create"} ${examSkill ? examSkill.charAt(0).toUpperCase() + examSkill.slice(1) : ""} Test`}
         subtitle={editId
           ? "Update this test's sections and questions, then save."
-          : "Build an IELTS test section by section. It will appear in students' My Tests."}
+          : "Build the test section by section. It will appear in students' My Tests."}
         action={
           <Stack direction="row" spacing={1}>
             <Button
@@ -415,10 +451,7 @@ export default function CreateNewExam() {
 
           <Collapse in={sec.open}>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
-              <TextField select label="Skill" value={sec.skill} onChange={(e) => changeSkill(si, e.target.value)}>
-                {SKILLS.map((s) => <MenuItem key={s} value={s} sx={{ textTransform: "capitalize" }}>{s}</MenuItem>)}
-              </TextField>
-              <TextField label="Section title" value={sec.title} onChange={(e) => updateSection(si, { title: e.target.value })} />
+              <TextField label="Section title" value={sec.title} onChange={(e) => updateSection(si, { title: e.target.value })} sx={{ gridColumn: { sm: "1 / -1" } }} />
 
               {/* Listening: paste an audio URL OR upload a file */}
               {sec.skill === "listening" && (

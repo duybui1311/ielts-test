@@ -9,7 +9,7 @@ import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import { apiFetch, API_BASE } from "../api";
 import { PageHeader } from "../component/ui";
-import AnnotatedText from "../component/AnnotatedText";
+import CommentedDoc from "../component/CommentedDoc";
 import AiGrade from "../component/AiGrade";
 
 const BANDS = [];
@@ -145,7 +145,6 @@ function GradePanel({ item, onGraded }) {
   const [comments, setComments] = useState([]);
   const [pending, setPending] = useState(null);    // { start, end, quote }
   const [commentText, setCommentText] = useState("");
-  const [activeId, setActiveId] = useState(null);
 
   useEffect(() => {
     if (item.kind !== "writing") return;
@@ -221,15 +220,14 @@ function GradePanel({ item, onGraded }) {
               Select text to add a comment
             </Typography>
           </Stack>
-          <Card variant="outlined" sx={{ p: 2, mt: 1, mb: 2, boxShadow: "none", maxHeight: 360, overflow: "auto" }}>
-            <AnnotatedText
+          <Box sx={{ mt: 1, mb: 2 }}>
+            <CommentedDoc
               text={item.response_text || ""}
               comments={comments}
               onSelect={(sel) => { setPending(sel); setCommentText(""); }}
-              activeId={activeId}
-              onHighlightClick={(id) => setActiveId(id)}
+              onDelete={removeComment}
             />
-          </Card>
+          </Box>
 
           {pending && (
             <Card variant="outlined" sx={{ p: 2, mb: 2, borderColor: "warning.main" }}>
@@ -250,37 +248,6 @@ function GradePanel({ item, onGraded }) {
                 <Button onClick={() => { setPending(null); window.getSelection()?.removeAllRanges(); }}>Cancel</Button>
               </Stack>
             </Card>
-          )}
-
-          {comments.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Comments ({comments.length})
-              </Typography>
-              <Stack spacing={1}>
-                {comments.map((c) => (
-                  <Card
-                    key={c.id} variant="outlined"
-                    onMouseEnter={() => setActiveId(c.id)} onMouseLeave={() => setActiveId(null)}
-                    sx={{ p: 1.5, boxShadow: "none" }}
-                  >
-                    <Stack direction="row" spacing={1} alignItems="flex-start">
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} noWrap display="block">
-                          “{c.quote}”
-                        </Typography>
-                        <Typography variant="body2">{c.comment}</Typography>
-                      </Box>
-                      <Tooltip title="Delete comment">
-                        <IconButton size="small" color="error" onClick={() => removeComment(c.id)}>
-                          <DeleteOutlineRoundedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  </Card>
-                ))}
-              </Stack>
-            </Box>
           )}
         </>
       ) : (

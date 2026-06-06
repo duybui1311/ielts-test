@@ -47,6 +47,7 @@ export default function TestManage() {
   const [renameVal, setRenameVal] = useState("");
   const [deleteFor, setDeleteFor] = useState(null);
   const [createAnchor, setCreateAnchor] = useState(null);   // "Create" menu
+  const [sortBy, setSortBy] = useState("default");
 
   const load = () => {
     setLoading(true);
@@ -118,9 +119,18 @@ export default function TestManage() {
   }
 
   const q = query.trim().toLowerCase();
-  const visible = items.filter((it) =>
-    !q || it.name.toLowerCase().includes(q) || it.skills.some((s) => s.includes(q)) || it.type.includes(q)
-  );
+  const SKILL_RANK = { reading: 0, listening: 1, writing: 2, speaking: 3 };
+  const visible = items
+    .filter((it) =>
+      !q || it.name.toLowerCase().includes(q) || it.skills.some((s) => s.includes(q)) || it.type.includes(q)
+    )
+    .sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "skill")
+        return (SKILL_RANK[a.skills[0]] ?? 9) - (SKILL_RANK[b.skills[0]] ?? 9) || a.name.localeCompare(b.name);
+      if (sortBy === "type") return a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
+      return 0;
+    });
 
   return (
     <Box>
@@ -136,7 +146,8 @@ export default function TestManage() {
               Create
             </Button>
             <Menu anchorEl={createAnchor} open={!!createAnchor} onClose={() => setCreateAnchor(null)}>
-              <MenuItem onClick={() => { setCreateAnchor(null); navigate("/create-exam"); }}>Reading / Listening exam</MenuItem>
+              <MenuItem onClick={() => { setCreateAnchor(null); navigate("/create-exam?skill=reading"); }}>Reading test</MenuItem>
+              <MenuItem onClick={() => { setCreateAnchor(null); navigate("/create-exam?skill=listening"); }}>Listening test</MenuItem>
               <MenuItem onClick={() => { setCreateAnchor(null); navigate("/task/writing/new"); }}>Writing task</MenuItem>
               <MenuItem onClick={() => { setCreateAnchor(null); navigate("/task/speaking/new"); }}>Speaking task</MenuItem>
             </Menu>
@@ -153,11 +164,19 @@ export default function TestManage() {
         </Card>
       ) : (
         <>
-        <TextField
-          fullWidth size="small" placeholder="Search by name, skill or type…"
-          value={query} onChange={(e) => setQuery(e.target.value)} sx={{ mb: 2 }}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment> }}
-        />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 2 }}>
+          <TextField
+            fullWidth size="small" placeholder="Search by name, skill or type…"
+            value={query} onChange={(e) => setQuery(e.target.value)}
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment> }}
+          />
+          <TextField select size="small" label="Sort by" value={sortBy} onChange={(e) => setSortBy(e.target.value)} sx={{ minWidth: 160 }}>
+            <MenuItem value="default">Default</MenuItem>
+            <MenuItem value="name">Name (A–Z)</MenuItem>
+            <MenuItem value="skill">Skill</MenuItem>
+            <MenuItem value="type">Type</MenuItem>
+          </TextField>
+        </Stack>
         <Stack spacing={1.5}>
           {visible.map((it) => (
             <Card key={`${it.type}-${it.id}`} sx={{ p: 2 }}>

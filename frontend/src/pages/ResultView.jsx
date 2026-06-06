@@ -6,7 +6,7 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiFetch, API_BASE } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
-import AnnotatedText from "../component/AnnotatedText";
+import CommentedDoc from "../component/CommentedDoc";
 import AiGrade from "../component/AiGrade";
 
 export default function ResultView() {
@@ -63,21 +63,21 @@ export default function ResultView() {
       )}
 
       {/* The student's work */}
-      <Card sx={{ p: 3, mb: 2 }}>
+      <Box sx={{ mb: 2 }}>
         <Typography variant="subtitle2" color="text.secondary" gutterBottom>
           {isWriting ? "Your response" : "Your answer"}
         </Typography>
         {isWriting ? (
-          <AnnotatedText text={sub.response_text || ""} comments={sub.comments || []} />
+          <CommentedDoc text={sub.response_text || ""} comments={sub.comments || []} />
         ) : (
-          <>
+          <Card sx={{ p: 3 }}>
             {sub.audio_url && <Box component="audio" controls src={`${API_BASE}${sub.audio_url}`} sx={{ width: "100%", mb: 2 }} />}
             <Typography sx={{ whiteSpace: "pre-wrap" }} color={sub.transcript ? "text.primary" : "text.disabled"}>
               {sub.transcript || "(no transcript)"}
             </Typography>
-          </>
+          </Card>
         )}
-      </Card>
+      </Box>
 
       {/* Teacher feedback */}
       {reviewed && sub.feedback && (
@@ -88,22 +88,6 @@ export default function ResultView() {
 
       {/* AI assessment */}
       {sub.ai_result && <Box sx={{ mb: 2 }}><AiGrade result={sub.ai_result} headlineBand={sub.band} /></Box>}
-
-      {/* Inline comments (writing) */}
-      {isWriting && (sub.comments?.length > 0) && (
-        <Card sx={{ p: 3 }}>
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>Inline comments ({sub.comments.length})</Typography>
-          <Divider sx={{ mb: 1.5 }} />
-          <Stack spacing={1}>
-            {sub.comments.map((c) => (
-              <Box key={c.id} sx={{ borderLeft: "3px solid", borderColor: "warning.main", pl: 1.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} display="block">“{c.quote}”</Typography>
-                <Typography variant="body2">{c.comment}</Typography>
-              </Box>
-            ))}
-          </Stack>
-        </Card>
-      )}
     </Box>
   );
 }
