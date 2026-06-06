@@ -1,12 +1,65 @@
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
 import bcrypt
 from backend.service.database import get_db
-from backend.service import models
+from backend.service import models, storage
 
 router = APIRouter(prefix="/api/tests", tags=["tests"])
+
+# kind -> (Supabase Storage bucket, default extension, default content-type)
+_UPLOAD_KINDS = {
+    "image": ("writing-charts", ".png", "image/png"),   # Writing Task 1 chart/diagram
+    "audio": ("speaking-audio", ".mp3", "audio/mpeg"),  # Listening audio
+}
+
+
+def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
+    try:
+        uid = int(x_user_id) if x_user_id else None
+    except (TypeError, ValueError):
+        uid = None
+    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
+    if not user or user.role != models.UserRole.teacher:
+        raise HTTPException(403, "Teachers only.")
+    return uid
+
+
+@router.post("/upload")
+async def upload_media(
+    kind: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Upload builder media (a Writing chart image or a Listening audio file) to
+    Supabase Storage and return its public URL for the section's image_url /
+    audio_url. Teacher-only."""
+    _require_teacher(db, x_user_id)
+    spec = _UPLOAD_KINDS.get(kind)
+    if not spec:
+        raise HTTPException(400, "kind must be 'image' or 'audio'.")
+    bucket, default_ext, default_ctype = spec
+    if not storage.is_configured():
+        raise HTTPException(
+            503,
+            "Uploads are not configured. Add SUPABASE_URL and SUPABASE_SERVICE_KEY "
+            "to backend/.env, then restart the backend.",
+        )
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file.")
+    ext = Path(file.filename or "").suffix or default_ext
+    ctype = file.content_type or default_ctype
+    try:
+        url = storage.upload_bytes(bucket, data, ctype, ext)
+    except storage.StorageNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Upload failed: {e}")
+    return {"url": url}
 
 
 class QuestionIn(BaseModel):
@@ -24,7 +77,8 @@ class SectionIn(BaseModel):
     skill: str                                  # listening | reading | writing | speaking
     title: str
     passage_md: str = ""
-    audio_url: Optional[str] = None
+    audio_url: Optional[str] = None             # listening audio
+    image_url: Optional[str] = None             # writing Task 1 chart/diagram
     questions: List[QuestionIn] = []
 
 
@@ -75,7 +129,7 @@ def import_test(payload: TestIn, db: Session = Depends(get_db)):
         db.flush()
         station = models.Station(
             exam_id=exam.id, position=s.position, case_id=case.id,
-            skill=s.skill, audio_url=s.audio_url,
+            skill=s.skill, audio_url=s.audio_url, image_url=s.image_url,
         )
         db.add(station)
         db.flush()
@@ -107,6 +161,7 @@ def export_test(exam_id: int, db: Session = Depends(get_db)):
             "title": st.case.title,
             "passage_md": st.case.body_md,
             "audio_url": st.audio_url,
+            "image_url": st.image_url,
             "questions": [{
                 "qtype": q.qtype.value,
                 "prompt": q.prompt,

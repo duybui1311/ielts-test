@@ -65,6 +65,7 @@ const EMPTY = {
   band_trend: [],
   recent: [],
   weakness: [],
+  productive: [],
 };
 
 export default function Dashboard() {
@@ -93,8 +94,9 @@ export default function Dashboard() {
     );
   }
 
-  const { kpis, band_trend, recent, weakness } = data;
-  const hasData = kpis.tests_taken > 0;
+  const { kpis, band_trend, recent, weakness, productive } = data;
+  const reviewed = (productive || []).filter((p) => p.band != null);
+  const hasData = kpis.tests_taken > 0 || reviewed.length > 0;
   const primary = theme.palette.primary.main;
   const ct = chartTheme(theme);
 
@@ -254,6 +256,54 @@ export default function Dashboard() {
               </React.Fragment>
             ))}
           </Card>
+
+          {/* Writing & Speaking — teacher-graded productive-skill results */}
+          {(productive || []).length > 0 && (
+            <Card sx={{ p: 0, gridColumn: { md: "1 / -1" } }}>
+              <Stack direction="row" alignItems="center" sx={{ p: 3, pb: 2 }}>
+                <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                  Writing &amp; Speaking
+                </Typography>
+              </Stack>
+              <Divider />
+              {productive.map((p, i) => (
+                <React.Fragment key={`${p.kind}-${i}`}>
+                  {i > 0 && <Divider />}
+                  <Stack direction="row" alignItems="center" spacing={2} sx={{ px: 3, py: 2 }}>
+                    <Box
+                      sx={(t) => ({
+                        width: 40, height: 40, borderRadius: 2,
+                        display: "grid", placeItems: "center", flexShrink: 0,
+                        color: p.kind === "writing" ? "success.main" : "warning.main",
+                        bgcolor: alpha(
+                          (p.kind === "writing" ? t.palette.success : t.palette.warning).main,
+                          t.palette.mode === "dark" ? 0.2 : 0.12
+                        ),
+                      })}
+                    >
+                      {p.kind === "writing" ? <EditNoteRoundedIcon /> : <MicRoundedIcon />}
+                    </Box>
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Typography fontWeight={600} noWrap>{p.title}</Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                        <Chip label={p.kind} size="small" sx={{ textTransform: "capitalize" }} />
+                        {p.band == null && (
+                          <Chip label="Awaiting review" size="small" color="default" variant="outlined" />
+                        )}
+                      </Stack>
+                    </Box>
+                    {p.band != null ? (
+                      <Typography variant="h6" fontWeight={800} color={bandColor(p.band)}>
+                        {p.band}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">—</Typography>
+                    )}
+                  </Stack>
+                </React.Fragment>
+              ))}
+            </Card>
+          )}
         </Box>
       )}
     </Box>

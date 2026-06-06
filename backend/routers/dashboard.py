@@ -34,6 +34,7 @@ def student_dashboard(
         "band_trend": [],
         "recent": [],
         "weakness": [],
+        "productive": [],
     }
     if not uid:
         return empty
@@ -47,6 +48,48 @@ def student_dashboard(
 
     graded = [a for a in attempts if a.status in _GRADED]
     bands = [a.overall_band for a in graded if a.overall_band is not None]
+
+    # Writing & Speaking are graded manually by teachers; surface the reviewed
+    # submissions (those with a band) alongside the auto-graded Reading/Listening
+    # results so the dashboard reflects all four skills.
+    writing_subs = (
+        db.query(models.WritingSubmission)
+        .filter(models.WritingSubmission.user_id == uid)
+        .order_by(models.WritingSubmission.created_at.desc())
+        .all()
+    )
+    speaking_subs = (
+        db.query(models.SpeakingSubmission)
+        .filter(models.SpeakingSubmission.user_id == uid)
+        .order_by(models.SpeakingSubmission.created_at.desc())
+        .all()
+    )
+
+    productive = [
+        {
+            "kind": "writing",
+            "title": s.task.title if s.task else "Writing task",
+            "band": s.band,
+            "feedback": s.feedback,
+            "status": s.status,
+            "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
+        }
+        for s in writing_subs
+    ] + [
+        {
+            "kind": "speaking",
+            "title": s.task.title if s.task else "Speaking task",
+            "band": s.band,
+            "feedback": s.feedback,
+            "status": s.status,
+            "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
+        }
+        for s in speaking_subs
+    ]
+
+    # Bands from reviewed Writing/Speaking feed the overall average and the trend.
+    prod_bands = [p["band"] for p in productive if p["band"] is not None]
+    bands = bands + prod_bands
 
     questions_answered = (
         db.query(func.count(models.Answer.id))
@@ -68,11 +111,24 @@ def student_dashboard(
         for r in weakness_rows
     ]
 
-    # band_trend: oldest -> newest so the chart reads left to right
-    trend = [
-        {"label": a.exam.name if a.exam else f"Attempt {a.id}", "band": a.overall_band}
-        for a in sorted(graded, key=lambda x: x.graded_at or x.started_at)
+    # band_trend: oldest -> newest so the chart reads left to right. Includes
+    # auto-graded exams plus reviewed Writing/Speaking submissions.
+    trend_points = [
+        (a.graded_at or a.started_at, a.exam.name if a.exam else f"Attempt {a.id}", a.overall_band)
+        for a in graded
         if a.overall_band is not None
+    ] + [
+        (s.reviewed_at or s.created_at, s.task.title if s.task else "Writing task", s.band)
+        for s in writing_subs
+        if s.band is not None
+    ] + [
+        (s.reviewed_at or s.created_at, s.task.title if s.task else "Speaking task", s.band)
+        for s in speaking_subs
+        if s.band is not None
+    ]
+    trend = [
+        {"label": label, "band": band}
+        for _, label, band in sorted(trend_points, key=lambda x: x[0])
     ]
 
     recent = [
@@ -96,4 +152,5 @@ def student_dashboard(
         "band_trend": trend,
         "recent": recent,
         "weakness": weakness,
+        "productive": productive,
     }

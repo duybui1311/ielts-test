@@ -52,6 +52,7 @@ def _build_content(exam, attempt_id, db):
             "title": station.case.title,
             "passage_md": station.case.body_md,
             "audio_url": station.audio_url,
+            "image_url": station.image_url,
             "questions": questions,
         })
     return sections

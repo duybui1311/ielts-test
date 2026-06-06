@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "rea
 import { Box } from "@mui/material";
 import { ColorModeProvider } from "./theme/ColorModeContext";
 import Login from "./pages/login";
+import Signup from "./pages/signup";
 import Dashboard from "./pages/dashboard";
 import TeacherDashboard from "./pages/teacherDashboard";
 import Navbar from "./component/navbar";
@@ -67,6 +68,7 @@ export default function App() {
                 <Routes>
                     {/* Public */}
                     <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<Signup />} />
 
                     {/* Private — all share the collapsible side navbar */}
                     <Route

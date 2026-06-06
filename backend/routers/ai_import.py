@@ -35,6 +35,14 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 
 MODEL = "claude-sonnet-4-6"
 
+# Closed sub_skill vocab — must mirror the frontend builder's SUB_SKILLS so the
+# imported test loads cleanly and analytics (which group by sub_skill) stay
+# consistent. Keep this list and frontend/src/pages/CreateNewExam.jsx in sync.
+SUB_SKILLS = [
+    "multiple_choice", "gap_fill", "true_false_notgiven",
+    "matching_headings", "sentence_completion", "short_answer",
+]
+
 # Tool schema the model must fill — mirrors tests_io.TestIn so the result can be
 # saved directly through POST /api/tests/import after teacher review.
 TEST_TOOL = {
@@ -53,7 +61,7 @@ TEST_TOOL = {
                     "properties": {
                         "skill": {"type": "string", "enum": ["reading", "listening", "writing", "speaking"]},
                         "title": {"type": "string"},
-                        "passage_md": {"type": "string", "description": "Reading passage or listening transcript (may be empty)"},
+                        "passage_md": {"type": "string", "description": "All student-facing material for the section in markdown: the reading passage or listening transcript PLUS task instructions, any list of headings, word/option banks, example answers and notes/table/flow-chart templates. Never omit shared lists students must choose from."},
                         "questions": {
                             "type": "array",
                             "items": {
@@ -64,7 +72,7 @@ TEST_TOOL = {
                                     "options": {"type": "array", "items": {"type": "string"}, "description": "MCQ options"},
                                     "correct_index": {"type": "integer", "description": "0-based index of the correct MCQ option"},
                                     "accept_answers": {"type": "array", "items": {"type": "string"}, "description": "Accepted answers for short questions"},
-                                    "sub_skill": {"type": "string"},
+                                    "sub_skill": {"type": "string", "enum": SUB_SKILLS, "description": "Question category from the fixed list"},
                                 },
                                 "required": ["qtype", "prompt"],
                             },
@@ -79,13 +87,40 @@ TEST_TOOL = {
 }
 
 SYSTEM = (
-    "You convert raw IELTS test material into a structured test. "
-    "Identify each section's skill (reading/listening/writing/speaking), include the "
-    "full passage or transcript in passage_md, and extract every question. "
-    "Use qtype 'mcq' for multiple choice (include options and the 0-based correct_index), "
-    "'short' for gap-fill/short-answer (include accept_answers with all acceptable variants), "
-    "and 'explain' for essay/extended answers. If an answer key is present, use it; "
-    "otherwise leave correct_index/accept_answers empty."
+    "You convert raw IELTS test material into a structured test. Be precise and "
+    "consistent — extract exactly what is on the page, never invent content.\n"
+    "Rules:\n"
+    "1. One section per reading passage or listening recording. Put the full passage "
+    "or listening transcript verbatim in passage_md. For writing/speaking sections, "
+    "put the task instructions (and any chart description) in passage_md.\n"
+    "2. Set each section's skill to one of: reading, listening, writing, speaking.\n"
+    "3. Question types (qtype):\n"
+    "   - 'mcq' for multiple choice: include every option in `options` and the 0-based "
+    "`correct_index` of the right answer.\n"
+    "   - 'short' for gap-fill, sentence/summary completion, short-answer and "
+    "True/False/Not Given: put all acceptable answers (including synonyms and "
+    "British/American spellings) in `accept_answers`.\n"
+    "   - 'explain' for Writing and Speaking tasks and any essay/extended answer. "
+    "EVERY question in a writing or speaking section must be 'explain'.\n"
+    "4. Set `sub_skill` for every reading/listening question, choosing the single best "
+    f"fit from this exact list (no other values): {', '.join(SUB_SKILLS)}.\n"
+    "5. Keep questions in their original order. Number nothing in the prompt text "
+    "itself — the position is enough.\n"
+    "6. If an answer key is present, use it. If not, leave correct_index/accept_answers "
+    "empty rather than guessing.\n"
+    "7. Preserve the original wording of prompts and options; fix only obvious OCR errors.\n"
+    "8. MATCHING tasks (matching headings, matching information/features/endings, and any "
+    "task where students pick from ONE shared list such as a box of headings i-x or a list "
+    "of names): output EACH item as an 'mcq' question whose `options` are the FULL shared "
+    "list, in the original order, so the student can see and choose every choice. Set "
+    "sub_skill to 'matching_headings'. Put the shared list (e.g. 'List of Headings') in "
+    "passage_md as well so nothing is lost.\n"
+    "9. Capture EVERYTHING the student needs to answer. Include in passage_md (using simple "
+    "markdown) every piece of student-facing material that is not itself a numbered "
+    "question: task instructions and word limits, lists of headings, word banks / boxes of "
+    "options, example answers, and the text of any notes/table/flow-chart/summary-completion "
+    "templates and diagram labels. Reproduce tables as markdown tables and keep gaps as "
+    "blanks like '________ (3)'. Never omit a heading list, option box, or instruction line."
 )
 
 
@@ -143,8 +178,40 @@ def _is_image(name: str, ctype: str) -> bool:
 
 
 def _finalize(result: dict) -> dict:
+    """Normalise the model output so the builder always receives a consistent
+    shape, regardless of provider or model drift."""
     result.setdefault("difficulty", "medium")
+    if result.get("difficulty") not in ("low", "medium", "high"):
+        result["difficulty"] = "medium"
     result.setdefault("time_limit_min", 60)
+
+    for sec in result.get("sections") or []:
+        skill = (sec.get("skill") or "reading").lower()
+        sec["skill"] = skill if skill in ("reading", "listening", "writing", "speaking") else "reading"
+        productive = sec["skill"] in ("writing", "speaking")
+        for q in sec.get("questions") or []:
+            qtype = (q.get("qtype") or "short").lower()
+            # Writing/Speaking are always extended, manually-marked answers.
+            if productive:
+                qtype = "explain"
+            elif qtype not in ("mcq", "short", "explain"):
+                qtype = "short"
+            q["qtype"] = qtype
+
+            if qtype == "mcq":
+                opts = [o for o in (q.get("options") or []) if str(o).strip()]
+                q["options"] = opts
+                ci = q.get("correct_index")
+                q["correct_index"] = ci if isinstance(ci, int) and 0 <= ci < len(opts) else 0
+            else:
+                q.pop("options", None)
+                q.pop("correct_index", None)
+
+            # Keep sub_skill within the closed analytics vocab.
+            if qtype == "explain":
+                q.pop("sub_skill", None)
+            elif q.get("sub_skill") not in SUB_SKILLS:
+                q["sub_skill"] = "multiple_choice" if qtype == "mcq" else "short_answer"
     return result
 
 
@@ -203,6 +270,7 @@ def _run_gemini(file: UploadFile, data: bytes) -> dict:
                 system_instruction=SYSTEM,
                 response_mime_type="application/json",
                 response_schema=_GEMINI_SCHEMA,
+                temperature=0,  # deterministic: same file -> same structured test
             ),
         )
     except Exception as e:  # noqa: BLE001

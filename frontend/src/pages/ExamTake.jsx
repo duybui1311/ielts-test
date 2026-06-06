@@ -3,16 +3,27 @@ import React, {
 } from "react";
 import {
   Box, Typography, Paper, RadioGroup, FormControlLabel, Radio,
-  TextField, Button, Stack, Chip, Alert, CircularProgress,
+  TextField, Button, Stack, Alert, CircularProgress,
 } from "@mui/material";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
-import { apiFetch } from "../api";
+import { apiFetch, API_BASE } from "../api";
+import { SkillChip } from "../component/ui";
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+/** Resolve a media URL: Supabase uploads are absolute; legacy paths are relative. */
+const mediaSrc = (url) => (!url ? "" : /^https?:\/\//.test(url) ? url : `${API_BASE}${url}`);
+
+const REF_LABEL = {
+  reading: "PASSAGE",
+  listening: "AUDIO & NOTES",
+  writing: "TASK",
+  speaking: "TASK",
+};
 
 export default function ExamTake() {
   const { attemptId } = useParams();
@@ -144,6 +155,108 @@ export default function ExamTake() {
     saveToDB(questionId, null, value);
   };
 
+  // ── A single question (shared across all skills) ─────────────────────────
+  const renderQuestion = (q, qi) => (
+    <Paper key={q.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} gutterBottom>
+        Q{qi + 1}. {q.prompt}
+      </Typography>
+
+      {q.qtype === "mcq" && (
+        <RadioGroup
+          value={answers[q.id]?.choice_index?.toString() ?? ""}
+          onChange={(e) => handleMCQ(q.id, parseInt(e.target.value, 10))}
+        >
+          {(q.options || []).map((opt, i) => (
+            <FormControlLabel
+              key={i}
+              value={i.toString()}
+              control={<Radio size="small" />}
+              label={opt}
+            />
+          ))}
+        </RadioGroup>
+      )}
+
+      {q.qtype === "short" && (
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Type your answer…"
+          value={answers[q.id]?.value_text ?? ""}
+          onChange={(e) => handleShortChange(q.id, e.target.value)}
+          onBlur={(e) => handleShortBlur(q.id, e.target.value)}
+          sx={{ mt: 1 }}
+        />
+      )}
+
+      {q.qtype === "explain" && (
+        <TextField
+          multiline
+          minRows={8}
+          fullWidth
+          placeholder="Write your answer…"
+          value={answers[q.id]?.value_text ?? ""}
+          onChange={(e) => handleShortChange(q.id, e.target.value)}
+          onBlur={(e) => handleShortBlur(q.id, e.target.value)}
+          sx={{ mt: 1 }}
+        />
+      )}
+    </Paper>
+  );
+
+  /** Per-skill reference panel: audio (listening), chart (writing), text. */
+  const renderReference = (sec, skill) => {
+    const hasAudio = skill === "listening" && sec.audio_url;
+    const hasImage = skill === "writing" && sec.image_url;
+    const hasText = !!(sec.passage_md && sec.passage_md.trim());
+    const isReading = skill === "reading";
+    return (
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2.5,
+          maxHeight: isReading ? 600 : "none",
+          overflowY: isReading ? "auto" : "visible",
+          position: skill === "listening" ? "sticky" : "static",
+          top: skill === "listening" ? 88 : "auto",
+        }}
+      >
+        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+          {REF_LABEL[skill] || "MATERIAL"}
+        </Typography>
+        {hasAudio && (
+          <Box
+            component="audio"
+            controls
+            preload="metadata"
+            src={mediaSrc(sec.audio_url)}
+            sx={{ width: "100%", mb: hasText ? 2 : 0 }}
+          />
+        )}
+        {hasImage && (
+          <Box
+            component="img"
+            src={mediaSrc(sec.image_url)}
+            alt="Task chart or diagram"
+            sx={{
+              display: "block", maxWidth: "100%", borderRadius: 1,
+              mb: hasText ? 2 : 0, border: "1px solid", borderColor: "divider",
+            }}
+          />
+        )}
+        {hasText && (
+          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.9 }}>
+            {sec.passage_md}
+          </Typography>
+        )}
+        {!hasAudio && !hasImage && !hasText && (
+          <Typography variant="body2" color="text.secondary">No additional material.</Typography>
+        )}
+      </Paper>
+    );
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -188,102 +301,41 @@ export default function ExamTake() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* ── Sections ── */}
-      {(examData?.sections || []).map((sec) => (
-        <Box key={sec.station_id} mb={4}>
-          <Stack direction="row" spacing={1} alignItems="center" mb={2}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Section {sec.position}: {sec.title}
-            </Typography>
-            {sec.skill && (
-              <Chip label={sec.skill} size="small" color="primary" />
+      {/* ── Sections (layout adapts per skill) ── */}
+      {(examData?.sections || []).map((sec) => {
+        const skill = (sec.skill || "reading").toLowerCase();
+        const isReading = skill === "reading";
+        return (
+          <Box key={sec.station_id} mb={4}>
+            <Stack direction="row" spacing={1} alignItems="center" mb={2}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Section {sec.position}: {sec.title}
+              </Typography>
+              {sec.skill && <SkillChip skill={sec.skill} />}
+            </Stack>
+
+            {isReading ? (
+              /* Reading: passage beside the questions */
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                  gap: 3,
+                }}
+              >
+                {renderReference(sec, skill)}
+                <Box>{sec.questions.map((q, qi) => renderQuestion(q, qi))}</Box>
+              </Box>
+            ) : (
+              /* Listening / Writing / Speaking: material on top, questions below */
+              <Stack spacing={3}>
+                {renderReference(sec, skill)}
+                <Box>{sec.questions.map((q, qi) => renderQuestion(q, qi))}</Box>
+              </Stack>
             )}
-          </Stack>
-
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-              gap: 3,
-            }}
-          >
-            {/* Passage */}
-            <Paper
-              variant="outlined"
-              sx={{ p: 2.5, maxHeight: 600, overflowY: "auto" }}
-            >
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                display="block"
-                gutterBottom
-              >
-                PASSAGE
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{ whiteSpace: "pre-wrap", lineHeight: 1.9 }}
-              >
-                {sec.passage_md}
-              </Typography>
-            </Paper>
-
-            {/* Questions */}
-            <Box>
-              {sec.questions.map((q, qi) => (
-                <Paper key={q.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
-                  <Typography variant="body2" fontWeight={600} gutterBottom>
-                    Q{qi + 1}. {q.prompt}
-                  </Typography>
-
-                  {q.qtype === "mcq" && (
-                    <RadioGroup
-                      value={answers[q.id]?.choice_index?.toString() ?? ""}
-                      onChange={(e) =>
-                        handleMCQ(q.id, parseInt(e.target.value, 10))
-                      }
-                    >
-                      {(q.options || []).map((opt, i) => (
-                        <FormControlLabel
-                          key={i}
-                          value={i.toString()}
-                          control={<Radio size="small" />}
-                          label={opt}
-                        />
-                      ))}
-                    </RadioGroup>
-                  )}
-
-                  {q.qtype === "short" && (
-                    <TextField
-                      size="small"
-                      fullWidth
-                      placeholder="Type your answer…"
-                      value={answers[q.id]?.value_text ?? ""}
-                      onChange={(e) => handleShortChange(q.id, e.target.value)}
-                      onBlur={(e) => handleShortBlur(q.id, e.target.value)}
-                      sx={{ mt: 1 }}
-                    />
-                  )}
-
-                  {q.qtype === "explain" && (
-                    <TextField
-                      multiline
-                      rows={6}
-                      fullWidth
-                      placeholder="Write your answer…"
-                      value={answers[q.id]?.value_text ?? ""}
-                      onChange={(e) => handleShortChange(q.id, e.target.value)}
-                      onBlur={(e) => handleShortBlur(q.id, e.target.value)}
-                      sx={{ mt: 1 }}
-                    />
-                  )}
-                </Paper>
-              ))}
-            </Box>
           </Box>
-        </Box>
-      ))}
+        );
+      })}
 
       <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2, mb: 4 }}>
         <Button

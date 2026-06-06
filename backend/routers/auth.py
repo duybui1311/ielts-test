@@ -15,11 +15,23 @@ class LoginIn(BaseModel):
     password: str
 
 
+class RegisterIn(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = None
+    username: Optional[str] = None
+    role: str = "student"          # student | teacher
+
+
 class LoginOut(BaseModel):
     user_id: int
     name: Optional[str] = None
     role: str
     token: str
+
+
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, stored_hash: Optional[str]) -> bool:
@@ -58,6 +70,50 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
             detail="Invalid credentials.",
         )
     # TEST-VERSION token only. Replace with a signed JWT before production.
+    return LoginOut(
+        user_id=user.id,
+        name=user.full_name,
+        role=user.role.value,
+        token=f"test-{user.id}",
+    )
+
+
+@router.post("/register", response_model=LoginOut, status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterIn, db: Session = Depends(get_db)) -> LoginOut:
+    email = (payload.email or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A valid email is required.")
+    if len(payload.password or "") < 6:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password must be at least 6 characters.")
+
+    # Self-signup is students only. Teacher/admin accounts are provisioned by
+    # hand (seed) or a future admin page, so the requested role is ignored here.
+    role = models.UserRole.student
+
+    username = (payload.username or "").strip().lower() or None
+
+    conflicts = [func.lower(models.User.email) == email]
+    if username:
+        conflicts.append(func.lower(models.User.username) == username)
+    existing = db.query(models.User).filter(or_(*conflicts)).first()
+    if existing:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "An account with that email or username already exists.",
+        )
+
+    user = models.User(
+        email=email,
+        username=username,
+        full_name=(payload.full_name or "").strip() or None,
+        role=role,
+        password_hash=hash_password(payload.password),
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
     return LoginOut(
         user_id=user.id,
         name=user.full_name,

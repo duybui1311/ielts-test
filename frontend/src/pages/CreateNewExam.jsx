@@ -24,7 +24,8 @@ function aiToSections(result) {
     skill: skills.includes(sec.skill) ? sec.skill : "reading",
     title: sec.title || `Section ${si + 1}`,
     passage_md: sec.passage_md || "",
-    audio_url: "",
+    audio_url: sec.audio_url || "",
+    image_url: sec.image_url || "",
     open: true,
     questions: (sec.questions && sec.questions.length ? sec.questions : [{ qtype: "short", prompt: "" }]).map((q) => ({
       key: uid(),
@@ -60,8 +61,10 @@ const newQuestion = () => ({
 });
 const newSection = (position) => ({
   key: uid(), position, skill: "reading", title: "", passage_md: "",
-  audio_url: "", questions: [newQuestion()], open: true,
+  audio_url: "", image_url: "", uploading: false, questions: [newQuestion()], open: true,
 });
+
+const isProductive = (skill) => skill === "writing" || skill === "speaking";
 
 export default function CreateNewExam() {
   const navigate = useNavigate();
@@ -138,8 +141,56 @@ export default function CreateNewExam() {
   const removeSection = (si) =>
     setSections((s) => s.filter((_, i) => i !== si).map((sec, i) => ({ ...sec, position: i + 1 })));
 
+  // Changing a section to Writing/Speaking auto-switches its questions to the
+  // extended "explain" (text, manual-marking) type.
+  const changeSkill = (si, skill) =>
+    setSections((s) =>
+      s.map((sec, i) =>
+        i === si
+          ? {
+              ...sec,
+              skill,
+              questions: isProductive(skill)
+                ? sec.questions.map((q) => ({ ...q, qtype: "explain" }))
+                : sec.questions,
+            }
+          : sec
+      )
+    );
+
+  // Upload a Writing chart image or Listening audio file to Supabase Storage and
+  // store the returned public URL on the section.
+  const uploadMedia = async (si, kind, file) => {
+    if (!file) return;
+    updateSection(si, { uploading: true });
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_BASE}/api/tests/upload?kind=${kind}`, {
+        method: "POST",
+        headers: { "X-User-Id": getUserId() || "" },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Upload failed.");
+      updateSection(si, kind === "image" ? { image_url: data.url } : { audio_url: data.url });
+      setToast(kind === "image" ? "Chart uploaded." : "Audio uploaded.");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      updateSection(si, { uploading: false });
+    }
+  };
+
   const addQuestion = (si) =>
-    setSections((s) => s.map((sec, i) => (i === si ? { ...sec, questions: [...sec.questions, newQuestion()] } : sec)));
+    setSections((s) =>
+      s.map((sec, i) => {
+        if (i !== si) return sec;
+        const q = isProductive(sec.skill) ? { ...newQuestion(), qtype: "explain" } : newQuestion();
+        return { ...sec, questions: [...sec.questions, q] };
+      })
+    );
   const removeQuestion = (si, qi) =>
     setSections((s) => s.map((sec, i) => (i === si ? { ...sec, questions: sec.questions.filter((_, j) => j !== qi) } : sec)));
 
@@ -207,6 +258,7 @@ export default function CreateNewExam() {
         title: sec.title.trim(),
         passage_md: sec.passage_md,
         audio_url: sec.skill === "listening" ? (sec.audio_url || null) : null,
+        image_url: sec.skill === "writing" ? (sec.image_url || null) : null,
         questions: sec.questions.map((q, qi) => {
           const base = {
             qtype: q.qtype,
@@ -300,15 +352,56 @@ export default function CreateNewExam() {
 
           <Collapse in={sec.open}>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
-              <TextField select label="Skill" value={sec.skill} onChange={(e) => updateSection(si, { skill: e.target.value })}>
+              <TextField select label="Skill" value={sec.skill} onChange={(e) => changeSkill(si, e.target.value)}>
                 {SKILLS.map((s) => <MenuItem key={s} value={s} sx={{ textTransform: "capitalize" }}>{s}</MenuItem>)}
               </TextField>
               <TextField label="Section title" value={sec.title} onChange={(e) => updateSection(si, { title: e.target.value })} />
+
+              {/* Listening: paste an audio URL OR upload a file */}
               {sec.skill === "listening" && (
-                <TextField label="Audio URL (optional)" value={sec.audio_url} onChange={(e) => updateSection(si, { audio_url: e.target.value })} sx={{ gridColumn: { sm: "1 / -1" } }} />
+                <Box sx={{ gridColumn: { sm: "1 / -1" } }}>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+                    <TextField
+                      label="Audio URL" fullWidth value={sec.audio_url}
+                      placeholder="https://…  (or upload a file →)"
+                      onChange={(e) => updateSection(si, { audio_url: e.target.value })}
+                    />
+                    <Button component="label" variant="outlined" startIcon={<UploadFileRoundedIcon />} disabled={sec.uploading} sx={{ flexShrink: 0 }}>
+                      {sec.uploading ? "Uploading…" : "Upload audio"}
+                      <input hidden type="file" accept="audio/*,.mp3,.m4a,.wav,.webm,.ogg"
+                        onChange={(e) => uploadMedia(si, "audio", e.target.files?.[0])} />
+                    </Button>
+                  </Stack>
+                  {sec.audio_url && <Box component="audio" controls src={sec.audio_url} sx={{ width: "100%", mt: 1 }} />}
+                </Box>
               )}
+
+              {/* Writing: upload the Task 1 chart / diagram */}
+              {sec.skill === "writing" && (
+                <Box sx={{ gridColumn: { sm: "1 / -1" } }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button component="label" variant="outlined" startIcon={<UploadFileRoundedIcon />} disabled={sec.uploading}>
+                      {sec.uploading ? "Uploading…" : sec.image_url ? "Replace chart / diagram" : "Upload chart / diagram (Task 1)"}
+                      <input hidden type="file" accept="image/*"
+                        onChange={(e) => uploadMedia(si, "image", e.target.files?.[0])} />
+                    </Button>
+                    {sec.image_url && (
+                      <Button size="small" color="error" onClick={() => updateSection(si, { image_url: "" })}>Remove</Button>
+                    )}
+                  </Stack>
+                  {sec.image_url && (
+                    <Box component="img" src={sec.image_url} alt="Task 1 chart"
+                      sx={{ display: "block", mt: 1, maxWidth: "100%", maxHeight: 240, borderRadius: 1, border: "1px solid", borderColor: "divider" }} />
+                  )}
+                </Box>
+              )}
+
               <TextField
-                label={sec.skill === "reading" ? "Passage" : "Transcript / notes (optional)"}
+                label={
+                  sec.skill === "reading" ? "Passage"
+                    : sec.skill === "listening" ? "Transcript / notes (optional)"
+                    : "Task instructions"
+                }
                 value={sec.passage_md}
                 onChange={(e) => updateSection(si, { passage_md: e.target.value })}
                 multiline minRows={4} sx={{ gridColumn: { sm: "1 / -1" } }}
@@ -329,7 +422,12 @@ export default function CreateNewExam() {
                 </Stack>
 
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
-                  <TextField select label="Type" value={q.qtype} onChange={(e) => updateQuestion(si, qi, { qtype: e.target.value })}>
+                  <TextField
+                    select label="Type" value={q.qtype}
+                    onChange={(e) => updateQuestion(si, qi, { qtype: e.target.value })}
+                    disabled={isProductive(sec.skill)}
+                    helperText={isProductive(sec.skill) ? "Writing/Speaking answers are marked manually" : undefined}
+                  >
                     {QTYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                   </TextField>
                   {q.qtype !== "explain" && (

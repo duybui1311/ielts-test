@@ -178,6 +178,7 @@ class Station(Base):
     # IELTS additions:
     skill: Mapped[Optional[str]] = mapped_column(String(20))        # listening|reading|writing|speaking
     audio_url: Mapped[Optional[str]] = mapped_column(String(500))   # Listening audio (Supabase Storage URL)
+    image_url: Mapped[Optional[str]] = mapped_column(String(500))   # Writing Task 1 chart/diagram (Supabase Storage URL)
     exam: Mapped["Exam"] = relationship("Exam", back_populates="stations")
     case: Mapped["Case"] = relationship("Case", back_populates="stations")
     questions: Mapped[List["Question"]] = relationship(

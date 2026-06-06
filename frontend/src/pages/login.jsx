@@ -28,7 +28,7 @@ function normalizeRole(r) {
 	return null;
 }
 
-function setAuthed(role, info = {}) {
+export function setAuthed(role, info = {}) {
 	const cleanRole = normalizeRole(role) || "student";
 	try {
 		localStorage.setItem("osce-auth", "1");
@@ -73,7 +73,7 @@ export function getRole() {
 	}
 }
 
-function landingFor(role) {
+export function landingFor(role) {
 	return role === "teacher" ? "/teacher_dashboard" : "/exams";
 }
 
@@ -257,6 +257,18 @@ export default function Login() {
 						<Button type="submit" variant="contained" size="large" disabled={submitting}>
 							{submitting ? "Signing in…" : "Sign in"}
 						</Button>
+
+						<Typography variant="body2" color="text.secondary" textAlign="center">
+							New here?{" "}
+							<Button
+								variant="text"
+								size="small"
+								onClick={() => navigate("/signup")}
+								sx={{ p: 0, minWidth: 0, verticalAlign: "baseline", textTransform: "none" }}
+							>
+								Create an account
+							</Button>
+						</Typography>
 
 						<Box>
 							<Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
