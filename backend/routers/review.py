@@ -24,7 +24,7 @@ def _uid(x_user_id: Optional[str]) -> Optional[int]:
 def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
     uid = _uid(x_user_id)
     user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role != models.UserRole.teacher:
+    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
         raise HTTPException(403, "Teachers only.")
     return uid
 
@@ -122,5 +122,111 @@ def grade_speaking(
     s.status = "reviewed"
     s.reviewed_by = uid
     s.reviewed_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+# ── Pending count (for the nav badge) ───────────────────────────────────────
+
+@router.get("/count")
+def pending_count(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_teacher(db, x_user_id)
+    n = (
+        db.query(models.WritingSubmission)
+        .filter(models.WritingSubmission.status == "submitted").count()
+        + db.query(models.SpeakingSubmission)
+        .filter(models.SpeakingSubmission.status == "submitted").count()
+    )
+    return {"pending": n}
+
+
+# ── Inline comments on writing responses ────────────────────────────────────
+
+class CommentIn(BaseModel):
+    start_offset: int
+    end_offset: int
+    quote: str
+    comment: str
+
+
+def _comment_out(c: models.WritingComment) -> dict:
+    return {
+        "id": c.id,
+        "start_offset": c.start_offset,
+        "end_offset": c.end_offset,
+        "quote": c.quote,
+        "comment": c.comment,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
+
+
+@router.get("/writing/{submission_id}/comments")
+def list_comments(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """List inline comments. Visible to the teacher and to the owning student."""
+    uid = _uid(x_user_id)
+    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
+    sub = db.query(models.WritingSubmission).filter(
+        models.WritingSubmission.id == submission_id
+    ).first()
+    if not sub:
+        raise HTTPException(404, "Submission not found")
+    is_teacher = user and user.role in (models.UserRole.teacher, models.UserRole.admin)
+    if not user or (not is_teacher and sub.user_id != user.id):
+        raise HTTPException(403, "Not allowed.")
+    rows = (
+        db.query(models.WritingComment)
+        .filter(models.WritingComment.submission_id == submission_id)
+        .order_by(models.WritingComment.start_offset.asc())
+        .all()
+    )
+    return [_comment_out(c) for c in rows]
+
+
+@router.post("/writing/{submission_id}/comments")
+def add_comment(
+    submission_id: int,
+    payload: CommentIn,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    uid = _require_teacher(db, x_user_id)
+    sub = db.query(models.WritingSubmission).filter(
+        models.WritingSubmission.id == submission_id
+    ).first()
+    if not sub:
+        raise HTTPException(404, "Submission not found")
+    if not (payload.comment or "").strip():
+        raise HTTPException(400, "Comment cannot be empty.")
+    c = models.WritingComment(
+        submission_id=submission_id,
+        start_offset=payload.start_offset,
+        end_offset=payload.end_offset,
+        quote=payload.quote,
+        comment=payload.comment.strip(),
+        created_by=uid,
+    )
+    db.add(c)
+    db.commit()
+    return _comment_out(c)
+
+
+@router.delete("/writing/comments/{comment_id}")
+def delete_comment(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_teacher(db, x_user_id)
+    c = db.query(models.WritingComment).filter(models.WritingComment.id == comment_id).first()
+    if not c:
+        raise HTTPException(404, "Comment not found")
+    db.delete(c)
     db.commit()
     return {"ok": True}

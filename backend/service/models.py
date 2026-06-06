@@ -449,6 +449,21 @@ class WritingSubmission(Base):
     task: Mapped["WritingTask"] = relationship("WritingTask")
 
 
+class WritingComment(Base):
+    """An inline teacher annotation on a span of a student's writing response."""
+    __tablename__ = "writing_comments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    submission_id: Mapped[int] = mapped_column(
+        ForeignKey("writing_submissions.id"), nullable=False
+    )
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    quote: Mapped[str] = mapped_column(Text, nullable=False)        # the highlighted text
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class SpeakingSubmission(Base):
     __tablename__ = "speaking_submissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

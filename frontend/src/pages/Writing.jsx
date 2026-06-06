@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Card, CardActionArea, Stack, Typography, Button, Chip, TextField,
-  CircularProgress, Alert, Divider, LinearProgress,
+  CircularProgress, Alert, Divider, LinearProgress, Collapse,
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
 import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
+import AnnotatedText from "../component/AnnotatedText";
 
 function isTeacher() {
   try {
@@ -28,6 +29,7 @@ export default function Writing({ embedded = false }) {
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
+  const [expanded, setExpanded] = useState({}); // submission id -> show annotated essay
 
   const loadSubs = useCallback(() => {
     apiFetch("/api/writing/submissions")
@@ -121,6 +123,34 @@ export default function Writing({ embedded = false }) {
                   <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
                     <strong>Teacher feedback:</strong> {s.feedback}
                   </Alert>
+                )}
+
+                {(s.comments?.length > 0) && (
+                  <Box sx={{ mt: 1.5 }}>
+                    <Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
+                        Inline comments ({s.comments.length})
+                      </Typography>
+                      <Button size="small" onClick={() => setExpanded((m) => ({ ...m, [s.id]: !m[s.id] }))}>
+                        {expanded[s.id] ? "Hide essay" : "Show in essay"}
+                      </Button>
+                    </Stack>
+                    <Collapse in={!!expanded[s.id]}>
+                      <Card variant="outlined" sx={{ p: 2, mb: 1.5, boxShadow: "none" }}>
+                        <AnnotatedText text={s.response_text || ""} comments={s.comments} />
+                      </Card>
+                    </Collapse>
+                    <Stack spacing={0.75}>
+                      {s.comments.map((c) => (
+                        <Box key={c.id} sx={{ borderLeft: "3px solid", borderColor: "warning.main", pl: 1.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} display="block">
+                            “{c.quote}”
+                          </Typography>
+                          <Typography variant="body2">{c.comment}</Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
                 )}
               </Box>
             </React.Fragment>

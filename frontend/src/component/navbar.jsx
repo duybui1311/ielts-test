@@ -1,9 +1,10 @@
 import * as React from "react";
 import {
     Box, Paper, List, ListItemButton, ListItemIcon, ListItemText,
-    Tooltip, Divider, Avatar, Stack, Typography, alpha,
+    Tooltip, Divider, Avatar, Stack, Typography, alpha, Badge,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { apiFetch } from "../api";
 
 import SchoolRoundedIcon         from "@mui/icons-material/SchoolRounded";
 import DashboardRoundedIcon      from "@mui/icons-material/DashboardRounded";
@@ -83,7 +84,22 @@ export default function Navbar({
         try { return localStorage.getItem("osce-name") || ""; } catch { return ""; }
     }, []);
 
+    // Pending-review count for the teacher/admin "Review" badge.
+    const [reviewCount, setReviewCount] = React.useState(0);
+    React.useEffect(() => {
+        if (role !== "teacher" && role !== "admin") return;
+        apiFetch("/api/review/count")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => { if (d) setReviewCount(d.pending || 0); })
+            .catch(() => {});
+    }, [role]);
+
     const NAV_ITEMS = ITEMS_BY_ROLE[role] || STUDENT_ITEMS;
+
+    const itemIcon = (it) =>
+        it.key === "review" && reviewCount > 0
+            ? <Badge badgeContent={reviewCount} color="error">{it.icon}</Badge>
+            : it.icon;
 
     const commonItemSx = (theme, selected) => ({
         mb: 0.5,
@@ -165,7 +181,7 @@ export default function Navbar({
                                 selected={selected}
                                 sx={(theme) => commonItemSx(theme, selected)}
                             >
-                                <ListItemIcon>{it.icon}</ListItemIcon>
+                                <ListItemIcon>{itemIcon(it)}</ListItemIcon>
                                 {expanded && (
                                     <ListItemText
                                         primary={it.label}

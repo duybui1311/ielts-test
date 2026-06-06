@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Tabs, Tab, Table, TableHead, TableBody, TableRow,
   TableCell, TextField, MenuItem, Switch, IconButton, Button, Chip, CircularProgress,
-  Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
+  Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip, InputAdornment,
 } from "@mui/material";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import PeopleAltRoundedIcon from "@mui/icons-material/PeopleAltRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import MenuBookRoundedIcon from "@mui/icons-material/MenuBookRounded";
@@ -27,6 +28,7 @@ export default function Admin() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [confirm, setConfirm] = useState(null); // { kind: 'user'|'test', id, name }
+  const [query, setQuery] = useState("");
 
   const myId = getUserId();
 
@@ -95,6 +97,13 @@ export default function Admin() {
         <Tab label={`Tests (${tests.length})`} />
       </Tabs>
 
+      <TextField
+        fullWidth size="small" sx={{ mb: 2 }}
+        placeholder={tab === 0 ? "Search users by name or email…" : "Search tests by name or owner…"}
+        value={query} onChange={(e) => setQuery(e.target.value)}
+        InputProps={{ startAdornment: <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment> }}
+      />
+
       {tab === 0 && (
         <Card sx={{ p: 0, overflowX: "auto" }}>
           <Table size="small">
@@ -109,7 +118,11 @@ export default function Admin() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {users.map((u) => {
+              {users.filter((u) => {
+                const q = query.trim().toLowerCase();
+                if (!q) return true;
+                return (u.full_name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q);
+              }).map((u) => {
                 const self = String(u.id) === String(myId);
                 return (
                   <TableRow key={u.id} hover>
@@ -169,7 +182,11 @@ export default function Admin() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {tests.map((t) => (
+              {tests.filter((t) => {
+                const q = query.trim().toLowerCase();
+                if (!q) return true;
+                return t.name.toLowerCase().includes(q) || (t.owner || "").toLowerCase().includes(q);
+              }).map((t) => (
                 <TableRow key={t.id} hover>
                   <TableCell>{t.name}</TableCell>
                   <TableCell>

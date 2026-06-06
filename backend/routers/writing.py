@@ -145,6 +145,22 @@ def my_submissions(
         .order_by(models.WritingSubmission.created_at.desc())
         .all()
     )
+    comments_by_sub: dict[int, list] = {}
+    if subs:
+        rows = (
+            db.query(models.WritingComment)
+            .filter(models.WritingComment.submission_id.in_([s.id for s in subs]))
+            .order_by(models.WritingComment.start_offset.asc())
+            .all()
+        )
+        for c in rows:
+            comments_by_sub.setdefault(c.submission_id, []).append({
+                "id": c.id,
+                "start_offset": c.start_offset,
+                "end_offset": c.end_offset,
+                "quote": c.quote,
+                "comment": c.comment,
+            })
     return [
         {
             "id": s.id,
@@ -155,6 +171,7 @@ def my_submissions(
             "band": s.band,
             "feedback": s.feedback,
             "response_text": s.response_text,
+            "comments": comments_by_sub.get(s.id, []),
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
         }

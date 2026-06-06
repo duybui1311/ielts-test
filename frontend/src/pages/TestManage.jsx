@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Button, Chip, IconButton, CircularProgress,
   Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Tooltip,
+  Tooltip, InputAdornment,
 } from "@mui/material";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import DriveFileRenameOutlineRoundedIcon from "@mui/icons-material/DriveFileRenameOutlineRounded";
@@ -24,6 +25,7 @@ export default function TestManage() {
   const [renameFor, setRenameFor] = useState(null); // exam being renamed
   const [renameVal, setRenameVal] = useState("");
   const [deleteFor, setDeleteFor] = useState(null); // exam being deleted
+  const [query, setQuery] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -116,8 +118,20 @@ export default function TestManage() {
           <Button variant="contained" onClick={() => navigate("/create-exam")}>Create your first test</Button>
         </Card>
       ) : (
+        <>
+        <TextField
+          fullWidth size="small" placeholder="Search tests by name or skill…"
+          value={query} onChange={(e) => setQuery(e.target.value)} sx={{ mb: 2 }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment> }}
+        />
         <Stack spacing={1.5}>
-          {exams.map((exam) => (
+          {exams
+            .filter((exam) => {
+              const q = query.trim().toLowerCase();
+              if (!q) return true;
+              return exam.name.toLowerCase().includes(q) || (exam.skills || []).some((s) => s.includes(q));
+            })
+            .map((exam) => (
             <Card key={exam.id} sx={{ p: 2 }}>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -156,6 +170,7 @@ export default function TestManage() {
             </Card>
           ))}
         </Stack>
+        </>
       )}
 
       {/* Rename dialog */}

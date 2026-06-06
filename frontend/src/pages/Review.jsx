@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Card, Stack, Typography, Button, Chip, TextField, MenuItem,
-  CircularProgress, Alert, Divider,
+  CircularProgress, Alert, Divider, IconButton, Tooltip,
 } from "@mui/material";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
 import { apiFetch, API_BASE } from "../api";
 import { PageHeader } from "../component/ui";
+import AnnotatedText from "../component/AnnotatedText";
 
 const BANDS = [];
 for (let b = 9; b >= 0; b -= 0.5) BANDS.push(b);
@@ -101,6 +104,49 @@ function GradePanel({ item, onGraded }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Inline comments (writing only)
+  const [comments, setComments] = useState([]);
+  const [pending, setPending] = useState(null);    // { start, end, quote }
+  const [commentText, setCommentText] = useState("");
+  const [activeId, setActiveId] = useState(null);
+
+  useEffect(() => {
+    if (item.kind !== "writing") return;
+    apiFetch(`/api/review/writing/${item.id}/comments`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setComments(Array.isArray(d) ? d : []))
+      .catch(() => setComments([]));
+  }, [item]);
+
+  const addComment = async () => {
+    if (!pending || !commentText.trim()) return;
+    try {
+      const res = await apiFetch(`/api/review/writing/${item.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({
+          start_offset: pending.start, end_offset: pending.end,
+          quote: pending.quote, comment: commentText.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not add comment.");
+      setComments((cs) => [...cs, data].sort((a, b) => a.start_offset - b.start_offset));
+      setPending(null);
+      setCommentText("");
+      window.getSelection()?.removeAllRanges();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const removeComment = async (id) => {
+    try {
+      const res = await apiFetch(`/api/review/writing/comments/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Could not delete comment.");
+      setComments((cs) => cs.filter((c) => c.id !== id));
+    } catch (e) { setError(e.message); }
+  };
+
   const submit = async () => {
     setSubmitting(true);
     setError("");
@@ -130,12 +176,75 @@ function GradePanel({ item, onGraded }) {
 
       {item.kind === "writing" ? (
         <>
-          <Typography variant="subtitle2" color="text.secondary">
-            Response ({item.word_count} words)
-          </Typography>
+          <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ flexGrow: 1 }}>
+              Response ({item.word_count} words)
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Select text to add a comment
+            </Typography>
+          </Stack>
           <Card variant="outlined" sx={{ p: 2, mt: 1, mb: 2, boxShadow: "none", maxHeight: 360, overflow: "auto" }}>
-            <Typography sx={{ whiteSpace: "pre-wrap" }}>{item.response_text}</Typography>
+            <AnnotatedText
+              text={item.response_text || ""}
+              comments={comments}
+              onSelect={(sel) => { setPending(sel); setCommentText(""); }}
+              activeId={activeId}
+              onHighlightClick={(id) => setActiveId(id)}
+            />
           </Card>
+
+          {pending && (
+            <Card variant="outlined" sx={{ p: 2, mb: 2, borderColor: "warning.main" }}>
+              <Typography variant="caption" color="text.secondary">Commenting on:</Typography>
+              <Typography variant="body2" sx={{ fontStyle: "italic", mb: 1 }}>
+                “{pending.quote.length > 140 ? pending.quote.slice(0, 140) + "…" : pending.quote}”
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="flex-start">
+                <TextField
+                  fullWidth size="small" autoFocus multiline
+                  placeholder="Your comment…"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                />
+                <Button variant="contained" startIcon={<AddCommentRoundedIcon />} onClick={addComment} disabled={!commentText.trim()}>
+                  Add
+                </Button>
+                <Button onClick={() => { setPending(null); window.getSelection()?.removeAllRanges(); }}>Cancel</Button>
+              </Stack>
+            </Card>
+          )}
+
+          {comments.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Comments ({comments.length})
+              </Typography>
+              <Stack spacing={1}>
+                {comments.map((c) => (
+                  <Card
+                    key={c.id} variant="outlined"
+                    onMouseEnter={() => setActiveId(c.id)} onMouseLeave={() => setActiveId(null)}
+                    sx={{ p: 1.5, boxShadow: "none" }}
+                  >
+                    <Stack direction="row" spacing={1} alignItems="flex-start">
+                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} noWrap display="block">
+                          “{c.quote}”
+                        </Typography>
+                        <Typography variant="body2">{c.comment}</Typography>
+                      </Box>
+                      <Tooltip title="Delete comment">
+                        <IconButton size="small" color="error" onClick={() => removeComment(c.id)}>
+                          <DeleteOutlineRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </Card>
+                ))}
+              </Stack>
+            </Box>
+          )}
         </>
       ) : (
         <>
