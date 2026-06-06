@@ -6,7 +6,8 @@ practise Writing and Speaking that are **graded by AI and reviewed by a teacher*
 Teachers build tests (by hand or with an AI importer), mark work with inline
 comments, and track how their class is doing.
 
-> This is a **test version** — sign-in is simplified (no JWT yet). See
+> This is a **test version** — sign-in uses real JWT auth, but the schema is
+> created with `create_all` (no migrations yet). See
 > [`CLAUDE.md`](./CLAUDE.md) for the deep technical reference.
 
 ---
@@ -50,6 +51,9 @@ DATABASE_URL=postgresql://postgres.<project-ref>:<password>@<region>.pooler.supa
 API_HOST=0.0.0.0
 API_PORT=8000
 FRONTEND_URL=http://localhost:3000
+
+# Required — secret used to sign/verify JWT access tokens (a long random string)
+JWT_SECRET=change-me-to-a-long-random-string
 
 # Optional — AI test importer & AI Writing/Speaking grading (Google Gemini)
 GEMINI_API_KEY=
@@ -146,6 +150,9 @@ Open http://localhost:3000 and sign in with a demo account. The frontend proxies
   test to generate data.
 - **Login fails / `Unable to sign in`** — make sure the backend is running on
   port 8000 and `backend/.env` has a valid `DATABASE_URL`.
+- **Keep getting bounced to `/login` (401)** — every API call needs a valid JWT;
+  set `JWT_SECRET` in `backend/.env` (auth fails clearly without it) and sign in
+  again. Tokens expire after 24h, so a stale session will redirect to login.
 - **Database connection hangs** — use the Supabase **Session Pooler** URL
   (port 5432), not the direct connection.
 - **AI import/grading says "busy" or "not configured"** — set `GEMINI_API_KEY`
