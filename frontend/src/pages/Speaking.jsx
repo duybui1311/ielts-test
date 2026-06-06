@@ -13,7 +13,7 @@ const SR = typeof window !== "undefined"
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null;
 
-export default function Speaking() {
+export default function Speaking({ embedded = false }) {
   const [tasks, setTasks] = useState([]);
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,7 @@ export default function Speaking() {
 
   return (
     <Box>
-      <PageHeader title="Speaking" subtitle="Record your answers and get teacher feedback." />
+      {!embedded && <PageHeader title="Speaking" subtitle="Record your answers and get teacher feedback." />}
 
       {!SR && (
         <Alert severity="info" sx={{ mb: 2 }}>

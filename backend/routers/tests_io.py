@@ -17,12 +17,13 @@ _UPLOAD_KINDS = {
 
 
 def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
+    """Allow teachers and admins to author/manage tests."""
     try:
         uid = int(x_user_id) if x_user_id else None
     except (TypeError, ValueError):
         uid = None
     user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role != models.UserRole.teacher:
+    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
         raise HTTPException(403, "Teachers only.")
     return uid
 
@@ -148,12 +149,177 @@ def import_test(payload: TestIn, db: Session = Depends(get_db)):
     return {"exam_id": exam.id, "sections": len(payload.sections)}
 
 
+class TestPatchIn(BaseModel):
+    name: Optional[str] = None
+    difficulty: Optional[str] = None            # low | medium | high
+    time_limit_min: Optional[int] = None
+
+
+class TestUpdateIn(BaseModel):
+    name: str
+    difficulty: str = "medium"
+    time_limit_min: int = 60
+    sections: List[SectionIn]
+
+
+def _exam_attempt_count(db: Session, exam_id: int) -> int:
+    return (
+        db.query(models.ExamAttempt)
+        .filter(models.ExamAttempt.exam_id == exam_id)
+        .count()
+    )
+
+
+def _delete_exam_graph(db: Session, exam: models.Exam) -> None:
+    """Delete an exam and everything that references it (attempts, answers,
+    error tags, access logs, stations/cases/questions). No ON DELETE CASCADE in
+    the schema, so we remove dependents explicitly, child-first."""
+    # ErrorTags reference answers/station_attempts/stations, so remove them first.
+    db.query(models.ErrorTag).filter(models.ErrorTag.exam_id == exam.id).delete(
+        synchronize_session=False
+    )
+    attempts = (
+        db.query(models.ExamAttempt)
+        .filter(models.ExamAttempt.exam_id == exam.id)
+        .all()
+    )
+    for ea in attempts:
+        sas = (
+            db.query(models.StationAttempt)
+            .filter(models.StationAttempt.exam_attempt_id == ea.id)
+            .all()
+        )
+        for sa in sas:
+            db.query(models.Answer).filter(
+                models.Answer.station_attempt_id == sa.id
+            ).delete(synchronize_session=False)
+            db.delete(sa)
+        db.delete(ea)
+    db.query(models.ExamAccessLog).filter(
+        models.ExamAccessLog.exam_id == exam.id
+    ).delete(synchronize_session=False)
+
+    case_ids = [st.case_id for st in exam.stations]
+    db.delete(exam)              # stations + questions cascade (delete-orphan)
+    db.flush()
+    for cid in case_ids:
+        c = db.query(models.Case).filter(models.Case.id == cid).first()
+        if c and not c.stations:
+            db.delete(c)
+
+
+def _replace_sections(db: Session, exam: models.Exam, sections: List[SectionIn]) -> None:
+    """Replace an exam's stations/questions with a new set (edit mode)."""
+    old_cases = [st.case_id for st in exam.stations]
+    exam.stations.clear()       # delete-orphan removes old stations + questions
+    db.flush()
+    for cid in old_cases:
+        c = db.query(models.Case).filter(models.Case.id == cid).first()
+        if c and not c.stations:
+            db.delete(c)
+    for s in sections:
+        case = models.Case(title=s.title, body_md=s.passage_md, created_by=exam.created_by)
+        db.add(case)
+        db.flush()
+        station = models.Station(
+            exam_id=exam.id, position=s.position, case_id=case.id,
+            skill=s.skill, audio_url=s.audio_url, image_url=s.image_url,
+        )
+        db.add(station)
+        db.flush()
+        for q in s.questions:
+            db.add(models.Question(
+                station_id=station.id,
+                qtype=models.QuestionType(q.qtype),
+                prompt=q.prompt,
+                options_json=q.options,
+                correct_index=q.correct_index,
+                accept_answers=q.accept_answers,
+                sub_skill=q.sub_skill,
+                display_order=q.display_order,
+            ))
+    exam.total_stations = len(sections)
+
+
+@router.patch("/{exam_id}")
+def rename_test(
+    exam_id: int,
+    payload: TestPatchIn,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Quick metadata edit (rename, difficulty, time limit). Teacher/admin."""
+    _require_teacher(db, x_user_id)
+    exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(404, "Exam not found")
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, "Name cannot be empty.")
+        exam.name = name
+    if payload.difficulty is not None:
+        exam.difficulty = models.DifficultyLevel(payload.difficulty)
+    if payload.time_limit_min is not None:
+        exam.time_limit_min = payload.time_limit_min
+    db.commit()
+    return {"id": exam.id, "name": exam.name}
+
+
+@router.put("/{exam_id}")
+def update_test(
+    exam_id: int,
+    payload: TestUpdateIn,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Replace an exam's content (builder edit). Blocked once students have
+    attempted it, to keep their results consistent."""
+    _require_teacher(db, x_user_id)
+    exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(404, "Exam not found")
+    if _exam_attempt_count(db, exam_id) > 0:
+        raise HTTPException(
+            409,
+            "This test already has student attempts — rename or delete it, or "
+            "duplicate it to make an edited copy.",
+        )
+    exam.name = payload.name.strip() or exam.name
+    exam.difficulty = models.DifficultyLevel(payload.difficulty)
+    exam.time_limit_min = payload.time_limit_min
+    _replace_sections(db, exam, payload.sections)
+    db.commit()
+    return {"id": exam.id, "sections": len(payload.sections)}
+
+
+@router.delete("/{exam_id}")
+def delete_test(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Delete a test and all of its attempts/answers. Teacher/admin."""
+    _require_teacher(db, x_user_id)
+    exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(404, "Exam not found")
+    _delete_exam_graph(db, exam)
+    db.commit()
+    return {"ok": True, "deleted": exam_id}
+
+
 @router.get("/{exam_id}/export")
 def export_test(exam_id: int, db: Session = Depends(get_db)):
     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(404, "Exam not found")
-    out = {"name": exam.name, "time_limit_min": exam.time_limit_min, "sections": []}
+    out = {
+        "name": exam.name,
+        "difficulty": exam.difficulty.value,
+        "time_limit_min": exam.time_limit_min,
+        "sections": [],
+    }
     for st in sorted(exam.stations, key=lambda x: x.position):
         out["sections"].append({
             "position": st.position,

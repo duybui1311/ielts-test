@@ -11,6 +11,8 @@ import ProtectedRoute from "./component/ProtectedRoute";
 import CreateNewExam from "./pages/CreateNewExam";
 import FlashcardPage from "./pages/flashcard";
 import ExamList from "./pages/ExamList";
+import TestManage from "./pages/TestManage";
+import Admin from "./pages/Admin";
 import ExamTake from "./pages/ExamTake";
 import ExamResults from "./pages/ExamResults";
 import History from "./pages/History";
@@ -31,6 +33,8 @@ function PrivateLayout() {
         if (p.startsWith("/results/"))          return "exams";
         if (p.startsWith("/dashboard"))         return "dashboard";
         if (p.startsWith("/teacher_dashboard")) return "teacher";
+        if (p.startsWith("/manage-tests"))      return "manage";
+        if (p.startsWith("/admin"))             return "admin";
         if (p.startsWith("/create-exam"))       return "create";
         if (p.startsWith("/writing"))           return "writing";
         if (p.startsWith("/speaking"))          return "speaking";
@@ -84,6 +88,8 @@ export default function App() {
                         <Route path="/results/:attemptId"  element={<ExamResults />} />
                         <Route path="/dashboard"           element={<Dashboard />} />
                         <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
+                        <Route path="/manage-tests"        element={<TestManage />} />
+                        <Route path="/admin"               element={<Admin />} />
                         <Route path="/create-exam"         element={<CreateNewExam />} />
                         <Route path="/writing"             element={<Writing />} />
                         <Route path="/speaking"            element={<Speaking />} />

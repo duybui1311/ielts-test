@@ -23,7 +23,7 @@ function fmt(secs) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export default function Writing() {
+export default function Writing({ embedded = false }) {
   const [tasks, setTasks] = useState([]);
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +65,7 @@ export default function Writing() {
 
   return (
     <Box>
-      <PageHeader title="Writing" subtitle="Practise IELTS essays and get teacher feedback." />
+      {!embedded && <PageHeader title="Writing" subtitle="Practise IELTS essays and get teacher feedback." />}
 
       {isTeacher() && <CreateTaskForm onCreated={loadTasks} />}
 

@@ -3,8 +3,11 @@ import React, {
 } from "react";
 import {
   Box, Typography, Paper, RadioGroup, FormControlLabel, Radio,
-  TextField, Button, Stack, Alert, CircularProgress,
+  TextField, Button, Stack, Alert, CircularProgress, Chip, Tooltip, LinearProgress,
 } from "@mui/material";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import CloudDoneRoundedIcon from "@mui/icons-material/CloudDoneRounded";
+import CloudSyncRoundedIcon from "@mui/icons-material/CloudSyncRounded";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, API_BASE } from "../api";
 import { SkillChip } from "../component/ui";
@@ -36,10 +39,12 @@ export default function ExamTake() {
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
+  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
   const submitted = useRef(false);
   const answersRef = useRef({});
   const handleSubmitRef = useRef(null);
+  const qRefs = useRef({});           // question id -> DOM node, for the navigator
 
   // Keep answersRef in sync so the timer's auto-submit sees fresh answers
   useEffect(() => { answersRef.current = answers; }, [answers]);
@@ -132,6 +137,7 @@ export default function ExamTake() {
 
   // ── Answer handlers ─────────────────────────────────────────────────────
   const saveToDB = useCallback((questionId, choiceIndex, valueText) => {
+    setSaveState("saving");
     apiFetch(`/api/attempts/${attemptId}/answer`, {
       method: "POST",
       body: JSON.stringify({
@@ -139,8 +145,21 @@ export default function ExamTake() {
         choice_index: choiceIndex ?? null,
         value_text: valueText ?? null,
       }),
-    }).catch(() => {}); // silent — answer is already in local state
+    })
+      .then((r) => setSaveState(r.ok ? "saved" : "error"))
+      .catch(() => setSaveState("error"));
   }, [attemptId]);
+
+  // Warn before leaving/refreshing while the test is unsubmitted.
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      if (submitted.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   const handleMCQ = (questionId, choiceIndex) => {
     setAnswers((a) => ({ ...a, [questionId]: { choice_index: choiceIndex } }));
@@ -155,11 +174,32 @@ export default function ExamTake() {
     saveToDB(questionId, null, value);
   };
 
+  // Flat list across sections for global numbering + the navigator.
+  const flatQuestions = [];
+  (examData?.sections || []).forEach((sec) =>
+    (sec.questions || []).forEach((q) => flatQuestions.push(q))
+  );
+  const qNumber = {};
+  flatQuestions.forEach((q, i) => { qNumber[q.id] = i + 1; });
+  const isAnswered = (q) => {
+    const a = answers[q.id];
+    return !!a && (a.choice_index != null || (a.value_text && a.value_text.trim() !== ""));
+  };
+  const answeredCount = flatQuestions.filter(isAnswered).length;
+
+  const jumpTo = (id) =>
+    qRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
+
   // ── A single question (shared across all skills) ─────────────────────────
-  const renderQuestion = (q, qi) => (
-    <Paper key={q.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
+  const renderQuestion = (q) => (
+    <Paper
+      key={q.id}
+      ref={(el) => { qRefs.current[q.id] = el; }}
+      variant="outlined"
+      sx={{ p: 2, mb: 2, scrollMarginTop: 96 }}
+    >
       <Typography variant="body2" fontWeight={600} gutterBottom>
-        Q{qi + 1}. {q.prompt}
+        Q{qNumber[q.id]}. {q.prompt}
       </Typography>
 
       {q.qtype === "mcq" && (
@@ -284,6 +324,17 @@ export default function ExamTake() {
           {examData?.exam_name}
         </Typography>
         <Stack direction="row" spacing={2} alignItems="center">
+          {saveState !== "idle" && (
+            <Tooltip title={saveState === "error" ? "Couldn't save — check your connection" : "Your answers are saved automatically"}>
+              <Chip
+                size="small"
+                variant="outlined"
+                color={saveState === "error" ? "error" : "success"}
+                icon={saveState === "saving" ? <CloudSyncRoundedIcon /> : <CloudDoneRoundedIcon />}
+                label={saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "Saved"}
+              />
+            </Tooltip>
+          )}
           {timeLeft !== null && (
             <Typography variant="h6" fontWeight={700} color={warn ? "error" : "text.primary"}>
               {fmt(timeLeft)}
@@ -298,6 +349,42 @@ export default function ExamTake() {
           </Button>
         </Stack>
       </Paper>
+
+      {/* ── Question navigator ── */}
+      {flatQuestions.length > 0 && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <CheckCircleRoundedIcon fontSize="small" color="success" />
+            <Typography variant="body2" fontWeight={600}>
+              {answeredCount} / {flatQuestions.length} answered
+            </Typography>
+            <Box sx={{ flexGrow: 1, ml: 1 }}>
+              <LinearProgress
+                variant="determinate"
+                value={(answeredCount / flatQuestions.length) * 100}
+                color="success"
+                sx={{ borderRadius: 1 }}
+              />
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            {flatQuestions.map((q) => {
+              const done = isAnswered(q);
+              return (
+                <Chip
+                  key={q.id}
+                  label={qNumber[q.id]}
+                  size="small"
+                  onClick={() => jumpTo(q.id)}
+                  color={done ? "success" : "default"}
+                  variant={done ? "filled" : "outlined"}
+                  sx={{ minWidth: 34, cursor: "pointer" }}
+                />
+              );
+            })}
+          </Stack>
+        </Paper>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -324,13 +411,13 @@ export default function ExamTake() {
                 }}
               >
                 {renderReference(sec, skill)}
-                <Box>{sec.questions.map((q, qi) => renderQuestion(q, qi))}</Box>
+                <Box>{sec.questions.map((q) => renderQuestion(q))}</Box>
               </Box>
             ) : (
               /* Listening / Writing / Speaking: material on top, questions below */
               <Stack spacing={3}>
                 {renderReference(sec, skill)}
-                <Box>{sec.questions.map((q, qi) => renderQuestion(q, qi))}</Box>
+                <Box>{sec.questions.map((q) => renderQuestion(q))}</Box>
               </Stack>
             )}
           </Box>

@@ -19,7 +19,23 @@ from backend.service.autograde import autograde_exam_attempt
 
 TEACHER_EMAIL = "teacher@demo.io"
 STUDENT_EMAIL = "student@demo.io"
+ADMIN_EMAIL = "admin@demo.io"
 PASSWORD = "demo1234"
+ADMIN_PASSWORD = "admin1234"
+
+
+def ensure_admin(db):
+    """Create the site admin account if it doesn't exist (idempotent)."""
+    admin = db.query(models.User).filter(models.User.email == ADMIN_EMAIL).first()
+    if not admin:
+        admin = models.User(
+            email=ADMIN_EMAIL, username="admin", full_name="Site Admin",
+            role=models.UserRole.admin, password_hash=_hash(ADMIN_PASSWORD),
+            is_active=True,
+        )
+        db.add(admin)
+        db.commit()
+    return admin
 
 
 def _hash(pw: str) -> str:
@@ -248,10 +264,12 @@ def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        ensure_admin(db)
         existing_teacher = db.query(models.User).filter(models.User.email == TEACHER_EMAIL).first()
         if existing_teacher:
             _practice_tasks(db, owner_id=existing_teacher.id)
             print("Demo data already present — ensured practice tasks.")
+            print(f"  Admin:   {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
             print(f"  Teacher: {TEACHER_EMAIL} / {PASSWORD}")
             print(f"  Student: {STUDENT_EMAIL} / {PASSWORD}")
             return
@@ -275,6 +293,7 @@ def main():
         db.commit()
 
         print("Seed complete.")
+        print(f"  Admin:   {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
         print(f"  Teacher: {TEACHER_EMAIL} / {PASSWORD}")
         print(f"  Student: {STUDENT_EMAIL} / {PASSWORD}")
     finally:

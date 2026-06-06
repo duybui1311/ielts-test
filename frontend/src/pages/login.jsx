@@ -74,7 +74,9 @@ export function getRole() {
 }
 
 export function landingFor(role) {
-	return role === "teacher" ? "/teacher_dashboard" : "/exams";
+	if (role === "admin") return "/admin";
+	if (role === "teacher") return "/manage-tests";
+	return "/exams";
 }
 
 /* ------------------------------ Component ------------------------------ */

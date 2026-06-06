@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Card, CardContent, CardActions,
-  Button, Chip, Stack, CircularProgress, Alert,
+  Button, Chip, Stack, CircularProgress, Alert, Tabs, Tab,
 } from "@mui/material";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import QuizIcon from "@mui/icons-material/Quiz";
@@ -11,21 +11,64 @@ import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-import { PageHeader, SkillChip, SKILL_COLOR } from "../component/ui";
+import { PageHeader, SkillChip } from "../component/ui";
+import Writing from "./Writing";
+import Speaking from "./Speaking";
 
-// Each skill gets its own section. Tests are organised by their (single) skill.
-const SKILL_SECTIONS = [
+const TABS = [
   { key: "reading", label: "Reading", icon: <MenuBookRoundedIcon /> },
   { key: "listening", label: "Listening", icon: <HeadphonesRoundedIcon /> },
   { key: "writing", label: "Writing", icon: <EditNoteRoundedIcon /> },
   { key: "speaking", label: "Speaking", icon: <MicRoundedIcon /> },
 ];
 
+function ExamGrid({ exams, skill, starting, onStart }) {
+  const list = exams.filter((e) => ((e.skills && e.skills[0]) || "reading") === skill);
+  if (list.length === 0) {
+    return (
+      <Card variant="outlined" sx={{ p: 4, textAlign: "center", bgcolor: "transparent" }}>
+        <Typography color="text.secondary">No {skill} tests yet.</Typography>
+      </Card>
+    );
+  }
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 2 }}>
+      {list.map((exam) => (
+        <Card key={exam.id} sx={{ display: "flex", flexDirection: "column", transition: "transform .15s ease", "&:hover": { transform: "translateY(-3px)" } }}>
+          <CardContent sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" fontWeight={700} gutterBottom>{exam.name}</Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
+              {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
+              <Chip label={exam.difficulty} size="small" variant="outlined" sx={{ textTransform: "capitalize" }} />
+            </Stack>
+            <Stack direction="row" spacing={2}>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <AccessTimeIcon fontSize="small" color="action" />
+                <Typography variant="body2" color="text.secondary">{exam.time_limit_min} min</Typography>
+              </Stack>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <QuizIcon fontSize="small" color="action" />
+                <Typography variant="body2" color="text.secondary">{exam.total_questions} questions</Typography>
+              </Stack>
+            </Stack>
+          </CardContent>
+          <CardActions sx={{ px: 2, pb: 2 }}>
+            <Button variant="contained" fullWidth disabled={starting === exam.id} onClick={() => onStart(exam.id)}>
+              {starting === exam.id ? "Starting…" : "Start Test"}
+            </Button>
+          </CardActions>
+        </Card>
+      ))}
+    </Box>
+  );
+}
+
 export default function ExamList() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(null);
+  const [tab, setTab] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -55,108 +98,33 @@ export default function ExamList() {
   };
 
   if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}><CircularProgress /></Box>;
   }
 
-  // Group each exam under its primary skill (skills[0]); fall back to "reading".
-  const bySkill = { reading: [], listening: [], writing: [], speaking: [] };
-  for (const exam of exams) {
-    const skill = (exam.skills && exam.skills[0]) || "reading";
-    (bySkill[skill] || bySkill.reading).push(exam);
-  }
-
-  const renderCard = (exam) => (
-    <Card
-      key={exam.id}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        transition: "transform .15s ease, box-shadow .15s ease",
-        "&:hover": { transform: "translateY(-3px)" },
-      }}
-    >
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography variant="h6" fontWeight={700} gutterBottom>
-          {exam.name}
-        </Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
-          {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
-          <Chip label={exam.difficulty} size="small" variant="outlined" sx={{ textTransform: "capitalize" }} />
-        </Stack>
-        <Stack direction="row" spacing={2}>
-          <Stack direction="row" alignItems="center" spacing={0.5}>
-            <AccessTimeIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {exam.time_limit_min} min
-            </Typography>
-          </Stack>
-          <Stack direction="row" alignItems="center" spacing={0.5}>
-            <QuizIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {exam.total_questions} questions
-            </Typography>
-          </Stack>
-        </Stack>
-      </CardContent>
-      <CardActions sx={{ px: 2, pb: 2 }}>
-        <Button
-          variant="contained"
-          fullWidth
-          disabled={starting === exam.id}
-          onClick={() => handleStart(exam.id)}
-        >
-          {starting === exam.id ? "Starting…" : "Start Test"}
-        </Button>
-      </CardActions>
-    </Card>
-  );
+  const skill = TABS[tab].key;
 
   return (
     <Box>
-      <PageHeader title="My Tests" subtitle="Practise one skill at a time — pick a test below." />
+      <PageHeader title="My Tests" subtitle="Practise one skill at a time — choose a tab below." />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 
-      {exams.length === 0 && !error && (
-        <Card sx={{ p: 5, textAlign: "center" }}>
-          <Typography color="text.secondary">No tests available yet.</Typography>
-        </Card>
-      )}
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
+      >
+        {TABS.map((t) => (
+          <Tab key={t.key} icon={t.icon} iconPosition="start" label={t.label} sx={{ minHeight: 48 }} />
+        ))}
+      </Tabs>
 
-      {exams.length > 0 && SKILL_SECTIONS.map(({ key, label, icon }) => {
-        const list = bySkill[key] || [];
-        return (
-          <Box key={key} sx={{ mb: 4 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-              <Box sx={{ color: `${SKILL_COLOR[key]}.main`, display: "flex" }}>{icon}</Box>
-              <Typography variant="h6" fontWeight={700}>{label}</Typography>
-              <Chip label={list.length} size="small" color={SKILL_COLOR[key]} />
-            </Stack>
-
-            {list.length === 0 ? (
-              <Card variant="outlined" sx={{ p: 3, textAlign: "center", bgcolor: "transparent" }}>
-                <Typography variant="body2" color="text.secondary">
-                  No {label.toLowerCase()} tests yet.
-                </Typography>
-              </Card>
-            ) : (
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                  gap: 2,
-                }}
-              >
-                {list.map(renderCard)}
-              </Box>
-            )}
-          </Box>
-        );
-      })}
+      {skill === "reading" && <ExamGrid exams={exams} skill="reading" starting={starting} onStart={handleStart} />}
+      {skill === "listening" && <ExamGrid exams={exams} skill="listening" starting={starting} onStart={handleStart} />}
+      {skill === "writing" && <Writing embedded />}
+      {skill === "speaking" && <Speaking embedded />}
     </Box>
   );
 }

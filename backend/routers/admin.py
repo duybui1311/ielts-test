@@ -1,0 +1,197 @@
+"""Admin area — site-wide management for the single admin role.
+
+Admin is identified by the `X-User-Id` header pointing at a user whose role is
+`admin` (test-version auth). Capabilities:
+- Site overview counts.
+- User management: list, change role, activate/deactivate, delete (guarded).
+- Test list with attempt counts (delete reuses /api/tests/{id}).
+
+No JWT yet — replace the header trust with real auth before production.
+"""
+from typing import Optional
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from backend.service.database import get_db
+from backend.service import models
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _require_admin(db: Session, x_user_id: Optional[str]) -> models.User:
+    try:
+        uid = int(x_user_id) if x_user_id else None
+    except (TypeError, ValueError):
+        uid = None
+    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
+    if not user or user.role != models.UserRole.admin:
+        raise HTTPException(403, "Admins only.")
+    return user
+
+
+@router.get("/overview")
+def overview(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_admin(db, x_user_id)
+    users = db.query(models.User).all()
+    by_role = {"student": 0, "teacher": 0, "admin": 0}
+    active = 0
+    for u in users:
+        by_role[u.role.value] = by_role.get(u.role.value, 0) + 1
+        if u.is_active:
+            active += 1
+    return {
+        "users": len(users),
+        "active_users": active,
+        "students": by_role.get("student", 0),
+        "teachers": by_role.get("teacher", 0),
+        "admins": by_role.get("admin", 0),
+        "classes": db.query(models.Class).count(),
+        "exams": db.query(models.Exam).count(),
+        "attempts": db.query(models.ExamAttempt).count(),
+        "writing_subs": db.query(models.WritingSubmission).count(),
+        "speaking_subs": db.query(models.SpeakingSubmission).count(),
+    }
+
+
+@router.get("/users")
+def list_users(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_admin(db, x_user_id)
+    # attempt counts per user (one query)
+    counts = dict(
+        db.query(models.ExamAttempt.user_id, func.count(models.ExamAttempt.id))
+        .group_by(models.ExamAttempt.user_id)
+        .all()
+    )
+    users = db.query(models.User).order_by(models.User.created_at.asc()).all()
+    return [
+        {
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "username": u.username,
+            "role": u.role.value,
+            "is_active": u.is_active,
+            "attempts": counts.get(u.id, 0),
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]
+
+
+class UserPatchIn(BaseModel):
+    role: Optional[str] = None          # student | teacher | admin
+    is_active: Optional[bool] = None
+    full_name: Optional[str] = None
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: int,
+    payload: UserPatchIn,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    admin = _require_admin(db, x_user_id)
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    if payload.role is not None:
+        try:
+            new_role = models.UserRole(payload.role)
+        except ValueError:
+            raise HTTPException(400, "Invalid role.")
+        if user.id == admin.id and new_role != models.UserRole.admin:
+            raise HTTPException(400, "You can't change your own admin role.")
+        user.role = new_role
+
+    if payload.is_active is not None:
+        if user.id == admin.id and not payload.is_active:
+            raise HTTPException(400, "You can't deactivate your own account.")
+        user.is_active = payload.is_active
+
+    if payload.full_name is not None:
+        user.full_name = payload.full_name.strip() or None
+
+    db.commit()
+    return {"id": user.id, "role": user.role.value, "is_active": user.is_active}
+
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Hard-delete a user — only when they own no content and have no attempts.
+    Otherwise the admin should deactivate them instead (keeps data intact)."""
+    admin = _require_admin(db, x_user_id)
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.id == admin.id:
+        raise HTTPException(400, "You can't delete your own account.")
+
+    blockers = []
+    if db.query(models.ExamAttempt).filter(models.ExamAttempt.user_id == user_id).count():
+        blockers.append("test attempts")
+    if db.query(models.Exam).filter(models.Exam.created_by == user_id).count():
+        blockers.append("authored exams")
+    if db.query(models.Class).filter(models.Class.owner_id == user_id).count():
+        blockers.append("owned classes")
+    if blockers:
+        raise HTTPException(
+            409,
+            "User has " + ", ".join(blockers) + ". Deactivate the account instead "
+            "of deleting it to keep that data.",
+        )
+
+    # Safe to remove light dependents, then the user.
+    db.query(models.ClassEnrolment).filter(
+        models.ClassEnrolment.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.WritingSubmission).filter(
+        models.WritingSubmission.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.SpeakingSubmission).filter(
+        models.SpeakingSubmission.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.delete(user)
+    db.commit()
+    return {"ok": True, "deleted": user_id}
+
+
+@router.get("/tests")
+def list_tests(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_admin(db, x_user_id)
+    exams = db.query(models.Exam).order_by(models.Exam.created_at.desc()).all()
+    owners = {
+        u.id: (u.full_name or u.username or u.email or f"User {u.id}")
+        for u in db.query(models.User).all()
+    }
+    out = []
+    for e in exams:
+        skills = sorted({st.skill for st in e.stations if st.skill})
+        attempts = db.query(models.ExamAttempt).filter(
+            models.ExamAttempt.exam_id == e.id
+        ).count()
+        out.append({
+            "id": e.id,
+            "name": e.name,
+            "skills": skills,
+            "owner": owners.get(e.created_by, f"User {e.created_by}"),
+            "attempts": attempts,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        })
+    return out

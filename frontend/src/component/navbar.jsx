@@ -9,8 +9,6 @@ import SchoolRoundedIcon         from "@mui/icons-material/SchoolRounded";
 import DashboardRoundedIcon      from "@mui/icons-material/DashboardRounded";
 import InsightsRoundedIcon       from "@mui/icons-material/InsightsRounded";
 import AddBoxRoundedIcon         from "@mui/icons-material/AddBoxRounded";
-import EditNoteRoundedIcon       from "@mui/icons-material/EditNoteRounded";
-import MicRoundedIcon            from "@mui/icons-material/MicRounded";
 import RateReviewRoundedIcon     from "@mui/icons-material/RateReviewRounded";
 import StyleRoundedIcon          from "@mui/icons-material/StyleRounded";
 import HistoryRoundedIcon        from "@mui/icons-material/HistoryRounded";
@@ -19,6 +17,8 @@ import HelpOutlineRoundedIcon    from "@mui/icons-material/HelpOutlineRounded";
 import LogoutRoundedIcon         from "@mui/icons-material/LogoutRounded";
 import DarkModeRoundedIcon       from "@mui/icons-material/DarkModeRounded";
 import LightModeRoundedIcon      from "@mui/icons-material/LightModeRounded";
+import LibraryBooksRoundedIcon   from "@mui/icons-material/LibraryBooksRounded";
+import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
 
 import { logout } from "../pages/login";
 import { useColorMode } from "../theme/ColorModeContext";
@@ -29,8 +29,6 @@ export const NAVBAR_WIDTH_EXPANDED  = 220;
 const STUDENT_ITEMS = [
     { key: "exams",     label: "My Tests",   icon: <SchoolRoundedIcon />,      path: "/exams" },
     { key: "dashboard", label: "Dashboard",  icon: <DashboardRoundedIcon />,   path: "/dashboard" },
-    { key: "writing",   label: "Writing",    icon: <EditNoteRoundedIcon />,    path: "/writing" },
-    { key: "speaking",  label: "Speaking",   icon: <MicRoundedIcon />,         path: "/speaking" },
     { key: "flashcard", label: "Flashcards", icon: <StyleRoundedIcon />,       path: "/flashcard" },
     { key: "history",   label: "History",    icon: <HistoryRoundedIcon />,     path: "/history" },
     { key: "settings",  label: "Settings",   icon: <SettingsRoundedIcon />,    path: "/settings" },
@@ -38,7 +36,7 @@ const STUDENT_ITEMS = [
 ];
 
 const TEACHER_ITEMS = [
-    { key: "exams",     label: "My Tests",        icon: <SchoolRoundedIcon />,      path: "/exams" },
+    { key: "manage",    label: "Test Manage",     icon: <LibraryBooksRoundedIcon />, path: "/manage-tests" },
     { key: "teacher",   label: "Class Dashboard", icon: <InsightsRoundedIcon />,    path: "/teacher_dashboard" },
     { key: "create",    label: "Create Exam",     icon: <AddBoxRoundedIcon />,      path: "/create-exam" },
     { key: "review",    label: "Review",          icon: <RateReviewRoundedIcon />,  path: "/review" },
@@ -47,6 +45,17 @@ const TEACHER_ITEMS = [
     { key: "settings",  label: "Settings",        icon: <SettingsRoundedIcon />,    path: "/settings" },
     { key: "help",      label: "Help",            icon: <HelpOutlineRoundedIcon />, path: "/help" },
 ];
+
+const ADMIN_ITEMS = [
+    { key: "admin",     label: "Admin",       icon: <AdminPanelSettingsRoundedIcon />, path: "/admin" },
+    { key: "manage",    label: "Test Manage", icon: <LibraryBooksRoundedIcon />,       path: "/manage-tests" },
+    { key: "create",    label: "Create Exam", icon: <AddBoxRoundedIcon />,             path: "/create-exam" },
+    { key: "review",    label: "Review",      icon: <RateReviewRoundedIcon />,         path: "/review" },
+    { key: "settings",  label: "Settings",    icon: <SettingsRoundedIcon />,           path: "/settings" },
+    { key: "help",      label: "Help",        icon: <HelpOutlineRoundedIcon />,        path: "/help" },
+];
+
+const ITEMS_BY_ROLE = { student: STUDENT_ITEMS, teacher: TEACHER_ITEMS, admin: ADMIN_ITEMS };
 
 export default function Navbar({
     activeKey = "exams",
@@ -65,8 +74,8 @@ export default function Navbar({
 
     const role = React.useMemo(() => {
         try {
-            return (localStorage.getItem("osce-role") || "student").toLowerCase() === "teacher"
-                ? "teacher" : "student";
+            const r = (localStorage.getItem("osce-role") || "student").toLowerCase();
+            return ["student", "teacher", "admin"].includes(r) ? r : "student";
         } catch { return "student"; }
     }, []);
 
@@ -74,7 +83,7 @@ export default function Navbar({
         try { return localStorage.getItem("osce-name") || ""; } catch { return ""; }
     }, []);
 
-    const NAV_ITEMS = role === "teacher" ? TEACHER_ITEMS : STUDENT_ITEMS;
+    const NAV_ITEMS = ITEMS_BY_ROLE[role] || STUDENT_ITEMS;
 
     const commonItemSx = (theme, selected) => ({
         mb: 0.5,
@@ -193,6 +202,9 @@ export default function Navbar({
                         </Typography>
                         <Typography variant="body2" fontWeight={600} noWrap>
                             {userName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ textTransform: "capitalize" }}>
+                            {role}
                         </Typography>
                     </Box>
                 )}

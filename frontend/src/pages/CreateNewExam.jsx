@@ -9,7 +9,8 @@ import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
-import { useNavigate } from "react-router-dom";
+import TipsAndUpdatesRoundedIcon from "@mui/icons-material/TipsAndUpdatesRounded";
+import { useNavigate, useLocation } from "react-router-dom";
 import { apiFetch, getUserId, API_BASE } from "../api";
 import { PageHeader, SkillChip } from "../component/ui";
 
@@ -66,8 +67,21 @@ const newSection = (position) => ({
 
 const isProductive = (skill) => skill === "writing" || skill === "speaking";
 
+// One-click question presets for the streamlined builder.
+const QUESTION_PRESETS = {
+  mcq:     { qtype: "mcq",     sub_skill: "multiple_choice", options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "" },
+  short:   { qtype: "short",   sub_skill: "gap_fill",        options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "" },
+  explain: { qtype: "explain", sub_skill: "short_answer",    options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "" },
+};
+const presetQuestion = (type) => ({ key: uid(), ...QUESTION_PRESETS[type] });
+
 export default function CreateNewExam() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const editId = React.useMemo(
+    () => new URLSearchParams(location.search).get("edit"),
+    [location.search]
+  );
 
   const [name, setName] = useState("");
   const [difficulty, setDifficulty] = useState("medium");
@@ -76,6 +90,8 @@ export default function CreateNewExam() {
   const [classId, setClassId] = useState("");
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([newSection(1)]);
+  const [loadingExam, setLoadingExam] = useState(!!editId);
+  const [detailsOpen, setDetailsOpen] = useState(true);
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -122,6 +138,23 @@ export default function CreateNewExam() {
       .then((d) => setClasses(Array.isArray(d) ? d : []))
       .catch(() => setClasses([]));
   }, []);
+
+  // Edit mode: load the existing test into the builder.
+  useEffect(() => {
+    if (!editId) return;
+    setLoadingExam(true);
+    apiFetch(`/api/tests/${editId}/export`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Could not load test"))))
+      .then((data) => {
+        if (data.name) setName(data.name);
+        if (data.difficulty) setDifficulty(data.difficulty);
+        if (data.time_limit_min) setTimeLimit(data.time_limit_min);
+        const secs = aiToSections(data);
+        if (secs.length) setSections(secs);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingExam(false));
+  }, [editId]);
 
   // ── nested-state helpers ──────────────────────────────────────────────
   const updateSection = (si, patch) =>
@@ -190,6 +223,12 @@ export default function CreateNewExam() {
         const q = isProductive(sec.skill) ? { ...newQuestion(), qtype: "explain" } : newQuestion();
         return { ...sec, questions: [...sec.questions, q] };
       })
+    );
+
+  // Quick-add a pre-configured question (streamlined builder).
+  const addPreset = (si, type) =>
+    setSections((s) =>
+      s.map((sec, i) => (i === si ? { ...sec, questions: [...sec.questions, presetQuestion(type)] } : sec))
     );
   const removeQuestion = (si, qi) =>
     setSections((s) => s.map((sec, i) => (i === si ? { ...sec, questions: sec.questions.filter((_, j) => j !== qi) } : sec)));
@@ -280,14 +319,13 @@ export default function CreateNewExam() {
 
     try {
       setSubmitting(true);
-      const res = await apiFetch("/api/tests/import", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      const res = editId
+        ? await apiFetch(`/api/tests/${editId}`, { method: "PUT", body: JSON.stringify(payload) })
+        : await apiFetch("/api/tests/import", { method: "POST", body: JSON.stringify(payload) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Failed to create exam.");
-      setToast(`Exam created (#${data.exam_id}).`);
-      setTimeout(() => navigate("/exams"), 1200);
+      if (!res.ok) throw new Error(data.detail || (editId ? "Failed to update exam." : "Failed to create exam."));
+      setToast(editId ? "Test updated." : `Exam created (#${data.exam_id}).`);
+      setTimeout(() => navigate(editId ? "/manage-tests" : "/exams"), 1200);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -295,11 +333,17 @@ export default function CreateNewExam() {
     }
   };
 
+  if (loadingExam) {
+    return <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}><CircularProgress /></Box>;
+  }
+
   return (
     <Box sx={{ maxWidth: 900 }}>
       <PageHeader
-        title="Create Exam"
-        subtitle="Build an IELTS test section by section. It will appear in students' My Tests."
+        title={editId ? "Edit Exam" : "Create Exam"}
+        subtitle={editId
+          ? "Update this test's sections and questions, then save."
+          : "Build an IELTS test section by section. It will appear in students' My Tests."}
         action={
           <Stack direction="row" spacing={1}>
             <Button
@@ -318,10 +362,20 @@ export default function CreateNewExam() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 
-      {/* Test details */}
+      {/* Test details (collapsible) */}
       <Card sx={{ p: 3, mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 2 }}>Test details</Typography>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
+        <Stack
+          direction="row" alignItems="center" sx={{ cursor: "pointer" }}
+          onClick={() => setDetailsOpen((o) => !o)}
+        >
+          <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>Test details</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }} noWrap>
+            {name || "Untitled"} · {difficulty} · {timeLimit} min
+          </Typography>
+          <ExpandMoreRoundedIcon sx={{ transform: detailsOpen ? "rotate(180deg)" : "none", transition: "0.2s" }} />
+        </Stack>
+        <Collapse in={detailsOpen}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2, mt: 2 }}>
           <TextField label="Test name" value={name} onChange={(e) => setName(e.target.value)} fullWidth sx={{ gridColumn: { sm: "1 / -1" } }} />
           <TextField select label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
             {DIFFICULTIES.map((d) => <MenuItem key={d} value={d} sx={{ textTransform: "capitalize" }}>{d}</MenuItem>)}
@@ -333,7 +387,14 @@ export default function CreateNewExam() {
             {classes.map((c) => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
           </TextField>
         </Box>
+        </Collapse>
       </Card>
+
+      <Alert severity="info" icon={<TipsAndUpdatesRoundedIcon />} sx={{ mb: 2 }}>
+        Tip: choose each section's <strong>skill</strong> first. Reading shows a passage,
+        Listening lets you add audio, and Writing/Speaking switch to a text answer with an
+        optional chart. Use the quick-add buttons to drop in a question type instantly.
+      </Alert>
 
       {/* Sections */}
       {sections.map((sec, si) => (
@@ -478,7 +539,18 @@ export default function CreateNewExam() {
               </Box>
             ))}
 
-            <Button startIcon={<AddRoundedIcon />} onClick={() => addQuestion(si)}>Add question</Button>
+            {isProductive(sec.skill) ? (
+              <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => addPreset(si, "explain")}>
+                Add response
+              </Button>
+            ) : (
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center", mr: 0.5 }}>Add:</Typography>
+                <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => addPreset(si, "mcq")}>MCQ</Button>
+                <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => addPreset(si, "short")}>Gap-fill</Button>
+                <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => addPreset(si, "explain")}>Essay</Button>
+              </Stack>
+            )}
           </Collapse>
         </Card>
       ))}

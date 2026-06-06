@@ -10,7 +10,7 @@ from .service import models  # noqa: F401  (registers tables)
 from .routers import (
     auth, tests_io, autograde, analytics, student_flow,
     dashboard, me, flashcards, teacher,
-    writing, speaking, review, ai_import,
+    writing, speaking, review, ai_import, admin,
 )
 
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
@@ -51,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(speaking.router)
     app.include_router(review.router)
     app.include_router(ai_import.router)
+    app.include_router(admin.router)
 
     # Serve uploaded speaking audio.
     os.makedirs(UPLOAD_DIR, exist_ok=True)
