@@ -199,7 +199,7 @@ export default function ExamTake() {
       sx={{ p: 2, mb: 2, scrollMarginTop: 96 }}
     >
       <Typography variant="body2" fontWeight={600} gutterBottom>
-        Q{qNumber[q.id]}. {q.prompt}
+        <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>{q.prompt}
       </Typography>
 
       {q.qtype === "mcq" && (

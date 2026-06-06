@@ -40,7 +40,9 @@ function aiToSections(result) {
   }));
 }
 
-const SKILLS = ["reading", "listening", "writing", "speaking"];
+// Exams cover the auto-gradable skills only. Writing & Speaking are created as
+// tasks (TaskEdit) so they get the submit -> AI-grade -> teacher-review flow.
+const SKILLS = ["reading", "listening"];
 const DIFFICULTIES = ["low", "medium", "high"];
 const QTYPES = [
   { value: "mcq", label: "Multiple choice" },

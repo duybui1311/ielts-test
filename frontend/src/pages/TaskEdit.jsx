@@ -23,6 +23,7 @@ export default function TaskEdit() {
   const [prompt, setPrompt] = useState("");
   const [taskType, setTaskType] = useState("task2");   // writing
   const [timeLimit, setTimeLimit] = useState(20);      // writing
+  const [minWords, setMinWords] = useState(250);       // writing word threshold
   const [part, setPart] = useState(1);                 // speaking
   const [prepSec, setPrepSec] = useState(60);          // speaking
   const [answerSec, setAnswerSec] = useState(120);     // speaking
@@ -39,6 +40,7 @@ export default function TaskEdit() {
         if (isWriting) {
           setTaskType(t.task_type || "task2");
           setTimeLimit(t.time_limit_min || 20);
+          setMinWords(t.min_words ?? (t.task_type === "task1" ? 150 : 250));
           setImageUrl(t.image_url || "");
         } else {
           setPart(t.part || 1);
@@ -73,7 +75,7 @@ export default function TaskEdit() {
     setError("");
     try {
       const body = isWriting
-        ? { task_type: taskType, title: title.trim(), prompt_md: prompt, time_limit_min: Number(timeLimit) || 20 }
+        ? { task_type: taskType, title: title.trim(), prompt_md: prompt, time_limit_min: Number(timeLimit) || 20, min_words: Number(minWords) || null }
         : { part: Number(part) || 1, title: title.trim(), prompt_md: prompt, prep_sec: Number(prepSec) || 60, answer_sec: Number(answerSec) || 120 };
 
       let id = taskId;
@@ -145,8 +147,9 @@ export default function TaskEdit() {
 
           {isWriting ? (
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2, alignItems: "start" }}>
+              <TextField type="number" label="Word threshold (min words)" value={minWords} onChange={(e) => setMinWords(e.target.value)} helperText="Shown to the student as the target length" />
               <TextField type="number" label="Time limit (minutes)" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} />
-              <Box>
+              <Box sx={{ gridColumn: { sm: "1 / -1" } }}>
                 <Button component="label" variant="outlined" startIcon={<UploadFileRoundedIcon />}>
                   {imageFile ? imageFile.name : imageUrl ? "Replace chart image" : "Upload chart image (Task 1)"}
                   <input hidden type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />

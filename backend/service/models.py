@@ -417,6 +417,7 @@ class WritingTask(Base):
     prompt_md: Mapped[str] = mapped_column(Text, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(500))       # Task 1 chart/diagram
     time_limit_min: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    min_words: Mapped[Optional[int]] = mapped_column(Integer)           # word threshold (null -> task-type default)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

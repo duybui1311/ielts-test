@@ -6,6 +6,7 @@ import {
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
+import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import { apiFetch, API_BASE } from "../api";
 import { PageHeader } from "../component/ui";
 import AnnotatedText from "../component/AnnotatedText";
@@ -37,6 +38,13 @@ export default function Review() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Keep the queue current: refetch when the teacher returns to the tab/window.
+  useEffect(() => {
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
+
   const onGraded = (item) => {
     setItems((list) => list.filter((x) => !(x.kind === item.kind && x.id === item.id)));
     setSelected(null);
@@ -49,7 +57,15 @@ export default function Review() {
 
   return (
     <Box>
-      <PageHeader title="Review" subtitle="Grade pending Writing and Speaking submissions." />
+      <PageHeader
+        title="Review"
+        subtitle="Grade pending Writing and Speaking submissions."
+        action={
+          <Button variant="outlined" startIcon={<RefreshRoundedIcon />} onClick={load}>
+            Refresh
+          </Button>
+        }
+      />
 
       {items.length === 0 ? (
         <Card sx={{ p: 5, textAlign: "center" }}>

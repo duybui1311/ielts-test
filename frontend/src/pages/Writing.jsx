@@ -2,16 +2,14 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Card, CardActionArea, Stack, Typography, Button, Chip, TextField,
   CircularProgress, Alert, Divider, LinearProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions,
 } from "@mui/material";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
+import { useNavigate } from "react-router-dom";
 import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
-import AnnotatedText from "../component/AnnotatedText";
-import AiGrade from "../component/AiGrade";
 
 function isTeacher() {
   try {
@@ -28,11 +26,11 @@ function fmt(secs) {
 }
 
 export default function Writing({ embedded = false }) {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
-  const [viewSub, setViewSub] = useState(null);  // submission shown in the result dialog
 
   const loadSubs = useCallback(() => {
     apiFetch("/api/writing/submissions")
@@ -120,7 +118,7 @@ export default function Writing({ embedded = false }) {
                 ) : (
                   <Chip size="small" color="warning" label="Awaiting review" />
                 )}
-                <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => setViewSub(s)}>
+                <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => navigate(`/result/writing/${s.id}`)}>
                   View result
                 </Button>
               </Stack>
@@ -129,54 +127,6 @@ export default function Writing({ embedded = false }) {
         </Card>
       )}
 
-      {/* Result viewer: the student's own essay + grade + feedback + comments */}
-      <Dialog open={!!viewSub} onClose={() => setViewSub(null)} fullWidth maxWidth="md" scroll="paper">
-        <DialogTitle>{viewSub?.task_title}</DialogTitle>
-        <DialogContent dividers>
-          {viewSub && (
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Chip size="small" label={`${viewSub.word_count} words`} />
-                {viewSub.status === "reviewed" ? (
-                  <Chip size="small" color="success" label={`Band ${viewSub.band}`} />
-                ) : (
-                  <Chip size="small" color="warning" label="Awaiting review" />
-                )}
-              </Stack>
-
-              <Box>
-                <Typography variant="caption" color="text.secondary">Your response</Typography>
-                <Card variant="outlined" sx={{ p: 2, mt: 0.5, boxShadow: "none" }}>
-                  <AnnotatedText text={viewSub.response_text || ""} comments={viewSub.comments || []} />
-                </Card>
-              </Box>
-
-              {viewSub.status === "reviewed" && viewSub.feedback && (
-                <Alert severity="info" icon={false}><strong>Teacher feedback:</strong> {viewSub.feedback}</Alert>
-              )}
-
-              {viewSub.ai_result && <AiGrade result={viewSub.ai_result} headlineBand={viewSub.band} />}
-
-              {(viewSub.comments?.length > 0) && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Inline comments ({viewSub.comments.length})</Typography>
-                  <Stack spacing={0.75}>
-                    {viewSub.comments.map((c) => (
-                      <Box key={c.id} sx={{ borderLeft: "3px solid", borderColor: "warning.main", pl: 1.25 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} display="block">“{c.quote}”</Typography>
-                        <Typography variant="body2">{c.comment}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                </Box>
-              )}
-            </Stack>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewSub(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }
@@ -308,7 +258,7 @@ function Editor({ task, onDone }) {
   }, [timeLeft]);
 
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  const minWords = task.task_type === "task1" ? 150 : 250;
+  const minWords = task.min_words || (task.task_type === "task1" ? 150 : 250);
 
   const submit = async () => {
     if (!text.trim()) { setError("Write something before submitting."); return; }

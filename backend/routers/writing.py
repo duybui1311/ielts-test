@@ -48,6 +48,7 @@ class TaskIn(BaseModel):
     prompt_md: str
     image_url: Optional[str] = None
     time_limit_min: int = 20
+    min_words: Optional[int] = None
 
 
 class SubmissionIn(BaseModel):
@@ -59,7 +60,7 @@ def _task_out(t: models.WritingTask):
     return {
         "id": t.id, "task_type": t.task_type, "title": t.title,
         "prompt_md": t.prompt_md, "image_url": t.image_url,
-        "time_limit_min": t.time_limit_min,
+        "time_limit_min": t.time_limit_min, "min_words": t.min_words,
     }
 
 
@@ -87,7 +88,7 @@ def create_task(
     t = models.WritingTask(
         task_type=payload.task_type, title=payload.title.strip(),
         prompt_md=payload.prompt_md, image_url=payload.image_url,
-        time_limit_min=payload.time_limit_min, created_by=uid,
+        time_limit_min=payload.time_limit_min, min_words=payload.min_words, created_by=uid,
     )
     db.add(t)
     db.commit()
@@ -99,6 +100,7 @@ class TaskPatchIn(BaseModel):
     prompt_md: Optional[str] = None
     time_limit_min: Optional[int] = None
     task_type: Optional[str] = None
+    min_words: Optional[int] = None
 
 
 @router.patch("/tasks/{task_id}")
@@ -122,6 +124,8 @@ def update_task(
         t.time_limit_min = payload.time_limit_min
     if payload.task_type is not None:
         t.task_type = payload.task_type
+    if payload.min_words is not None:
+        t.min_words = payload.min_words
     db.commit()
     return _task_out(t)
 
@@ -239,6 +243,46 @@ def ai_grade_submission(
         _write_ai_error_tags(db, user_id=s.user_id, skill="writing", tags=result.get("error_tags"))
     db.commit()
     return {"id": s.id, "status": s.status, "ai_result": result}
+
+
+@router.get("/submissions/{submission_id}")
+def get_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Full detail for one submission — the owning student or a teacher/admin."""
+    uid = _uid(x_user_id)
+    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
+    s = db.query(models.WritingSubmission).filter(models.WritingSubmission.id == submission_id).first()
+    if not s:
+        raise HTTPException(404, "Submission not found")
+    is_teacher = user and user.role in (models.UserRole.teacher, models.UserRole.admin)
+    if not user or (not is_teacher and s.user_id != user.id):
+        raise HTTPException(403, "Not allowed.")
+    visible = is_teacher or s.approved_by_teacher or settings.AI_GRADES_AUTO_VISIBLE
+    comments = [
+        {"id": c.id, "start_offset": c.start_offset, "end_offset": c.end_offset, "quote": c.quote, "comment": c.comment}
+        for c in db.query(models.WritingComment)
+        .filter(models.WritingComment.submission_id == s.id)
+        .order_by(models.WritingComment.start_offset.asc()).all()
+    ]
+    return {
+        "id": s.id, "kind": "writing",
+        "task_title": s.task.title if s.task else "Writing task",
+        "task_prompt": s.task.prompt_md if s.task else None,
+        "task_type": s.task.task_type if s.task else None,
+        "image_url": s.task.image_url if s.task else None,
+        "response_text": s.response_text,
+        "word_count": s.word_count,
+        "status": ("reviewed" if visible else "submitted") if not is_teacher else s.status,
+        "band": s.band if visible else None,
+        "feedback": s.feedback if visible else None,
+        "ai_result": s.ai_result if visible else None,
+        "comments": comments,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
+    }
 
 
 @router.get("/submissions")

@@ -22,6 +22,7 @@ import Help from "./pages/Help";
 import Writing from "./pages/Writing";
 import Speaking from "./pages/Speaking";
 import Review from "./pages/Review";
+import ResultView from "./pages/ResultView";
 
 function PrivateLayout() {
     const [navWidth, setNavWidth] = React.useState(72);
@@ -96,6 +97,7 @@ export default function App() {
                         <Route path="/create-exam"         element={<CreateNewExam />} />
                         <Route path="/writing"             element={<Writing />} />
                         <Route path="/speaking"            element={<Speaking />} />
+                        <Route path="/result/:kind/:submissionId" element={<ResultView />} />
                         <Route path="/review"              element={<Review />} />
                         <Route path="/flashcard"           element={<FlashcardPage />} />
                         <Route path="/history"             element={<History />} />

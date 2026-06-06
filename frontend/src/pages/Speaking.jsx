@@ -2,26 +2,25 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Box, Card, CardActionArea, Stack, Typography, Button, Chip, TextField,
   CircularProgress, Alert, Divider, IconButton,
-  Dialog, DialogTitle, DialogContent, DialogActions,
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import StopRoundedIcon from "@mui/icons-material/StopRounded";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
+import { useNavigate } from "react-router-dom";
 import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
-import AiGrade from "../component/AiGrade";
 
 const SR = typeof window !== "undefined"
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null;
 
 export default function Speaking({ embedded = false }) {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
-  const [viewSub, setViewSub] = useState(null);
 
   const loadSubs = useCallback(() => {
     apiFetch("/api/speaking/submissions")
@@ -104,7 +103,7 @@ export default function Speaking({ embedded = false }) {
                 ) : (
                   <Chip size="small" color="warning" label="Awaiting review" />
                 )}
-                <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => setViewSub(s)}>
+                <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => navigate(`/result/speaking/${s.id}`)}>
                   View result
                 </Button>
               </Stack>
@@ -113,42 +112,6 @@ export default function Speaking({ embedded = false }) {
         </Card>
       )}
 
-      {/* Result viewer: recording + transcript + grade + feedback */}
-      <Dialog open={!!viewSub} onClose={() => setViewSub(null)} fullWidth maxWidth="md" scroll="paper">
-        <DialogTitle>{viewSub?.task_title}</DialogTitle>
-        <DialogContent dividers>
-          {viewSub && (
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Chip size="small" label={`Part ${viewSub.part}`} />
-                {viewSub.status === "reviewed" ? (
-                  <Chip size="small" color="success" label={`Band ${viewSub.band}`} />
-                ) : (
-                  <Chip size="small" color="warning" label="Awaiting review" />
-                )}
-              </Stack>
-              {viewSub.audio_url && (
-                <Box component="audio" controls src={`${API_BASE}${viewSub.audio_url}`} sx={{ width: "100%" }} />
-              )}
-              <Box>
-                <Typography variant="caption" color="text.secondary">Transcript</Typography>
-                <Card variant="outlined" sx={{ p: 2, mt: 0.5, boxShadow: "none" }}>
-                  <Typography sx={{ whiteSpace: "pre-wrap" }} color={viewSub.transcript ? "text.primary" : "text.disabled"}>
-                    {viewSub.transcript || "(no transcript)"}
-                  </Typography>
-                </Card>
-              </Box>
-              {viewSub.status === "reviewed" && viewSub.feedback && (
-                <Alert severity="info" icon={false}><strong>Teacher feedback:</strong> {viewSub.feedback}</Alert>
-              )}
-              {viewSub.ai_result && <AiGrade result={viewSub.ai_result} headlineBand={viewSub.band} />}
-            </Stack>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewSub(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

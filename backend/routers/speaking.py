@@ -214,6 +214,38 @@ def ai_grade_submission(
     return {"id": s.id, "status": s.status, "ai_result": result}
 
 
+@router.get("/submissions/{submission_id}")
+def get_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Full detail for one speaking submission — owning student or teacher/admin."""
+    uid = _uid(x_user_id)
+    user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
+    s = db.query(models.SpeakingSubmission).filter(models.SpeakingSubmission.id == submission_id).first()
+    if not s:
+        raise HTTPException(404, "Submission not found")
+    is_teacher = user and user.role in (models.UserRole.teacher, models.UserRole.admin)
+    if not user or (not is_teacher and s.user_id != user.id):
+        raise HTTPException(403, "Not allowed.")
+    visible = is_teacher or s.approved_by_teacher or settings.AI_GRADES_AUTO_VISIBLE
+    return {
+        "id": s.id, "kind": "speaking",
+        "task_title": s.task.title if s.task else "Speaking task",
+        "task_prompt": s.task.prompt_md if s.task else None,
+        "part": s.task.part if s.task else None,
+        "transcript": s.transcript,
+        "audio_url": s.audio_url,
+        "status": ("reviewed" if visible else "submitted") if not is_teacher else s.status,
+        "band": s.band if visible else None,
+        "feedback": s.feedback if visible else None,
+        "ai_result": s.ai_result if visible else None,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
+    }
+
+
 @router.get("/submissions")
 def my_submissions(
     db: Session = Depends(get_db),
