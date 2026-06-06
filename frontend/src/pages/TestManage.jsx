@@ -2,107 +2,130 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Button, Chip, IconButton, CircularProgress,
   Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Tooltip, InputAdornment,
+  Tooltip, InputAdornment, MenuItem,
 } from "@mui/material";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import DriveFileRenameOutlineRoundedIcon from "@mui/icons-material/DriveFileRenameOutlineRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddBoxRoundedIcon from "@mui/icons-material/AddBoxRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, getUserId } from "../api";
 import { PageHeader, SkillChip } from "../component/ui";
 
+// Normalise exams + writing/speaking tasks into one manageable list.
+function toItems(exams, writing, speaking) {
+  const ex = exams.map((e) => ({
+    type: "exam", id: e.id, name: e.name, skills: e.skills || [],
+    meta: `${e.total_questions} Q · ${e.time_limit_min} min · ${e.difficulty}`,
+  }));
+  const wr = writing.map((t) => ({
+    type: "writing", id: t.id, name: t.title, skills: ["writing"], raw: t,
+    meta: `${t.task_type === "task1" ? "Task 1" : "Task 2"} · ${t.time_limit_min} min`,
+  }));
+  const sp = speaking.map((t) => ({
+    type: "speaking", id: t.id, name: t.title, skills: ["speaking"], raw: t,
+    meta: `Part ${t.part}`,
+  }));
+  return [...ex, ...wr, ...sp];
+}
+
+const itemApi = (it) => (it.type === "exam" ? `/api/tests/${it.id}` : `/api/${it.type}/tasks/${it.id}`);
+
 export default function TestManage() {
   const navigate = useNavigate();
-  const [exams, setExams] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
-  const [busy, setBusy] = useState(null);          // exam id with an action in flight
-
-  const [renameFor, setRenameFor] = useState(null); // exam being renamed
-  const [renameVal, setRenameVal] = useState("");
-  const [deleteFor, setDeleteFor] = useState(null); // exam being deleted
+  const [busy, setBusy] = useState(null);
   const [query, setQuery] = useState("");
+
+  const [renameFor, setRenameFor] = useState(null);
+  const [renameVal, setRenameVal] = useState("");
+  const [deleteFor, setDeleteFor] = useState(null);
+  const [editTask, setEditTask] = useState(null);   // { ...item } for writing/speaking
 
   const load = () => {
     setLoading(true);
-    apiFetch("/api/exams")
-      .then((r) => r.json())
-      .then((d) => setExams(Array.isArray(d) ? d : []))
-      .catch(() => setError("Could not load tests."))
-      .finally(() => setLoading(false));
+    Promise.all([
+      apiFetch("/api/exams").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      apiFetch("/api/writing/tasks").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      apiFetch("/api/speaking/tasks").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ]).then(([e, w, s]) => {
+      setItems(toItems(
+        Array.isArray(e) ? e : [],
+        Array.isArray(w) ? w : [],
+        Array.isArray(s) ? s : [],
+      ));
+    }).finally(() => setLoading(false));
   };
   useEffect(load, []);
 
-  const doTest = async (examId) => {
+  const doItem = async (it) => {
+    if (it.type !== "exam") { navigate(it.type === "writing" ? "/writing" : "/speaking"); return; }
     const userId = parseInt(getUserId(), 10);
     if (!userId) { navigate("/login"); return; }
-    setBusy(examId);
+    setBusy(it.id);
     try {
       const res = await apiFetch("/api/attempts/start", {
-        method: "POST",
-        body: JSON.stringify({ exam_id: examId, user_id: userId }),
+        method: "POST", body: JSON.stringify({ exam_id: it.id, user_id: userId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to start");
       navigate(`/exam/${data.attempt_id}`, { state: data });
-    } catch (e) {
-      setError(e.message);
-      setBusy(null);
-    }
+    } catch (e) { setError(e.message); setBusy(null); }
+  };
+
+  const editItem = (it) => {
+    if (it.type === "exam") navigate(`/create-exam?edit=${it.id}`);
+    else setEditTask(it);
   };
 
   const submitRename = async () => {
     const name = renameVal.trim();
     if (!name) return;
-    const id = renameFor.id;
-    setBusy(id);
+    const it = renameFor;
+    setBusy(it.id);
     try {
-      const res = await apiFetch(`/api/tests/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name }),
-      });
+      const body = it.type === "exam" ? { name } : { title: name };
+      const res = await apiFetch(itemApi(it), { method: "PATCH", body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Rename failed");
-      setExams((xs) => xs.map((e) => (e.id === id ? { ...e, name } : e)));
-      setToast("Test renamed.");
+      setItems((xs) => xs.map((x) => (x.type === it.type && x.id === it.id ? { ...x, name } : x)));
+      setToast("Renamed.");
       setRenameFor(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(null);
-    }
+    } catch (e) { setError(e.message); } finally { setBusy(null); }
   };
 
   const confirmDelete = async () => {
-    const id = deleteFor.id;
-    setBusy(id);
+    const it = deleteFor;
+    setBusy(it.id);
     try {
-      const res = await apiFetch(`/api/tests/${id}`, { method: "DELETE" });
+      const res = await apiFetch(itemApi(it), { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Delete failed");
-      setExams((xs) => xs.filter((e) => e.id !== id));
-      setToast("Test deleted.");
+      setItems((xs) => xs.filter((x) => !(x.type === it.type && x.id === it.id)));
+      setToast("Deleted.");
       setDeleteFor(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(null);
-    }
+    } catch (e) { setError(e.message); } finally { setBusy(null); }
   };
 
   if (loading) {
     return <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}><CircularProgress /></Box>;
   }
 
+  const q = query.trim().toLowerCase();
+  const visible = items.filter((it) =>
+    !q || it.name.toLowerCase().includes(q) || it.skills.some((s) => s.includes(q)) || it.type.includes(q)
+  );
+
   return (
     <Box>
       <PageHeader
         title="Test Manage"
-        subtitle="Edit, rename, delete or take any test."
+        subtitle="Edit, rename, delete or take any test — including Writing & Speaking tasks."
         action={
           <Button variant="contained" startIcon={<AddBoxRoundedIcon />} onClick={() => navigate("/create-exam")}>
             Create Exam
@@ -112,7 +135,7 @@ export default function TestManage() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 
-      {exams.length === 0 ? (
+      {items.length === 0 ? (
         <Card sx={{ p: 5, textAlign: "center" }}>
           <Typography color="text.secondary" sx={{ mb: 2 }}>No tests yet.</Typography>
           <Button variant="contained" onClick={() => navigate("/create-exam")}>Create your first test</Button>
@@ -120,48 +143,37 @@ export default function TestManage() {
       ) : (
         <>
         <TextField
-          fullWidth size="small" placeholder="Search tests by name or skill…"
+          fullWidth size="small" placeholder="Search by name, skill or type…"
           value={query} onChange={(e) => setQuery(e.target.value)} sx={{ mb: 2 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment> }}
         />
         <Stack spacing={1.5}>
-          {exams
-            .filter((exam) => {
-              const q = query.trim().toLowerCase();
-              if (!q) return true;
-              return exam.name.toLowerCase().includes(q) || (exam.skills || []).some((s) => s.includes(q));
-            })
-            .map((exam) => (
-            <Card key={exam.id} sx={{ p: 2 }}>
+          {visible.map((it) => (
+            <Card key={`${it.type}-${it.id}`} sx={{ p: 2 }}>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography fontWeight={700} noWrap>{exam.name}</Typography>
+                  <Typography fontWeight={700} noWrap>{it.name}</Typography>
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
-                    {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
-                    <Chip size="small" variant="outlined" label={`${exam.total_questions} Q`} />
-                    <Chip size="small" variant="outlined" label={`${exam.time_limit_min} min`} />
-                    <Chip size="small" variant="outlined" sx={{ textTransform: "capitalize" }} label={exam.difficulty} />
+                    {it.skills.map((s) => <SkillChip key={s} skill={s} />)}
+                    {it.type !== "exam" && <Chip size="small" color="default" label="task" />}
+                    <Chip size="small" variant="outlined" label={it.meta} />
                   </Stack>
                 </Box>
                 <Stack direction="row" spacing={0.5}>
-                  <Button
-                    size="small" variant="contained" startIcon={<PlayArrowRoundedIcon />}
-                    disabled={busy === exam.id} onClick={() => doTest(exam.id)}
-                  >
-                    Do it
+                  <Button size="small" variant="contained" startIcon={<PlayArrowRoundedIcon />}
+                    disabled={busy === it.id} onClick={() => doItem(it)}>
+                    {it.type === "exam" ? "Do it" : "Open"}
                   </Button>
-                  <Tooltip title="Edit content">
-                    <IconButton size="small" onClick={() => navigate(`/create-exam?edit=${exam.id}`)}>
-                      <EditRoundedIcon fontSize="small" />
-                    </IconButton>
+                  <Tooltip title="Edit">
+                    <IconButton size="small" onClick={() => editItem(it)}><EditRoundedIcon fontSize="small" /></IconButton>
                   </Tooltip>
                   <Tooltip title="Rename">
-                    <IconButton size="small" onClick={() => { setRenameFor(exam); setRenameVal(exam.name); }}>
+                    <IconButton size="small" onClick={() => { setRenameFor(it); setRenameVal(it.name); }}>
                       <DriveFileRenameOutlineRoundedIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Delete">
-                    <IconButton size="small" color="error" onClick={() => setDeleteFor(exam)}>
+                    <IconButton size="small" color="error" onClick={() => setDeleteFor(it)}>
                       <DeleteOutlineRoundedIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -169,19 +181,20 @@ export default function TestManage() {
               </Stack>
             </Card>
           ))}
+          {visible.length === 0 && (
+            <Typography color="text.secondary" sx={{ p: 2 }}>No matches.</Typography>
+          )}
         </Stack>
         </>
       )}
 
-      {/* Rename dialog */}
+      {/* Rename */}
       <Dialog open={!!renameFor} onClose={() => setRenameFor(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Rename test</DialogTitle>
+        <DialogTitle>Rename</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus fullWidth label="Test name" sx={{ mt: 1 }}
+          <TextField autoFocus fullWidth label="Name" sx={{ mt: 1 }}
             value={renameVal} onChange={(e) => setRenameVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submitRename(); }}
-          />
+            onKeyDown={(e) => { if (e.key === "Enter") submitRename(); }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRenameFor(null)}>Cancel</Button>
@@ -191,25 +204,88 @@ export default function TestManage() {
 
       {/* Delete confirm */}
       <Dialog open={!!deleteFor} onClose={() => setDeleteFor(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Delete test?</DialogTitle>
+        <DialogTitle>Delete {deleteFor?.type === "exam" ? "test" : "task"}?</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
-            <strong>{deleteFor?.name}</strong> and all of its student attempts will be permanently deleted.
-            This cannot be undone.
+            <strong>{deleteFor?.name}</strong> and all of its {deleteFor?.type === "exam" ? "attempts" : "submissions"} will
+            be permanently deleted. This cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteFor(null)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={confirmDelete} disabled={busy === deleteFor?.id}>
-            Delete
-          </Button>
+          <Button color="error" variant="contained" onClick={confirmDelete} disabled={busy === deleteFor?.id}>Delete</Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={!!toast} autoHideDuration={2500} onClose={() => setToast("")} message={toast}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      {/* Task editor (writing/speaking) */}
+      <TaskEditDialog
+        item={editTask}
+        onClose={() => setEditTask(null)}
+        onSaved={(updated) => {
+          setItems((xs) => xs.map((x) => (x.type === updated.type && x.id === updated.id ? { ...x, name: updated.name, raw: updated.raw } : x)));
+          setEditTask(null);
+          setToast("Task updated.");
+        }}
+        onError={setError}
       />
+
+      <Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast("")} message={toast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }} />
     </Box>
+  );
+}
+
+function TaskEditDialog({ item, onClose, onSaved, onError }) {
+  const [title, setTitle] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [num, setNum] = useState(0);    // time_limit_min (writing) or part (speaking)
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!item) return;
+    setTitle(item.name || "");
+    setPrompt(item.raw?.prompt_md || "");
+    setNum(item.type === "writing" ? (item.raw?.time_limit_min || 20) : (item.raw?.part || 1));
+  }, [item]);
+
+  if (!item) return null;
+  const isWriting = item.type === "writing";
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body = isWriting
+        ? { title, prompt_md: prompt, time_limit_min: Number(num) || 20 }
+        : { title, prompt_md: prompt, part: Number(num) || 1 };
+      const res = await apiFetch(`/api/${item.type}/tasks/${item.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not save.");
+      onSaved({ ...item, name: data.title, raw: data });
+    } catch (e) { onError(e.message); } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open={!!item} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Edit {isWriting ? "writing" : "speaking"} task</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+          <TextField label="Prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} fullWidth multiline minRows={4} />
+          {isWriting ? (
+            <TextField label="Time limit (min)" type="number" value={num} onChange={(e) => setNum(e.target.value)} sx={{ maxWidth: 200 }} />
+          ) : (
+            <TextField select label="Part" value={num} onChange={(e) => setNum(e.target.value)} sx={{ maxWidth: 200 }}>
+              {[1, 2, 3].map((p) => <MenuItem key={p} value={p}>Part {p}</MenuItem>)}
+            </TextField>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={save} disabled={saving || !title.trim()}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

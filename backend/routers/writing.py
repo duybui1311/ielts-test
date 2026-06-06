@@ -25,7 +25,7 @@ def _uid(x_user_id: Optional[str]) -> Optional[int]:
 def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
     uid = _uid(x_user_id)
     user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role != models.UserRole.teacher:
+    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
         raise HTTPException(403, "Teachers only.")
     return uid
 
@@ -72,6 +72,62 @@ def create_task(
     db.add(t)
     db.commit()
     return _task_out(t)
+
+
+class TaskPatchIn(BaseModel):
+    title: Optional[str] = None
+    prompt_md: Optional[str] = None
+    time_limit_min: Optional[int] = None
+    task_type: Optional[str] = None
+
+
+@router.patch("/tasks/{task_id}")
+def update_task(
+    task_id: int,
+    payload: TaskPatchIn,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_teacher(db, x_user_id)
+    t = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    if payload.title is not None:
+        if not payload.title.strip():
+            raise HTTPException(400, "Title cannot be empty.")
+        t.title = payload.title.strip()
+    if payload.prompt_md is not None:
+        t.prompt_md = payload.prompt_md
+    if payload.time_limit_min is not None:
+        t.time_limit_min = payload.time_limit_min
+    if payload.task_type is not None:
+        t.task_type = payload.task_type
+    db.commit()
+    return _task_out(t)
+
+
+@router.delete("/tasks/{task_id}")
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Delete a writing task and its submissions/comments. Teacher/admin."""
+    _require_teacher(db, x_user_id)
+    t = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    subs = db.query(models.WritingSubmission).filter(
+        models.WritingSubmission.task_id == task_id
+    ).all()
+    for s in subs:
+        db.query(models.WritingComment).filter(
+            models.WritingComment.submission_id == s.id
+        ).delete(synchronize_session=False)
+        db.delete(s)
+    db.delete(t)
+    db.commit()
+    return {"ok": True, "deleted": task_id}
 
 
 @router.post("/tasks/{task_id}/image")

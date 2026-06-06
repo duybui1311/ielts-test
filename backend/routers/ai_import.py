@@ -22,6 +22,7 @@ Design notes:
 """
 import os
 import io
+import time
 import json
 import base64
 from typing import Optional
@@ -262,19 +263,42 @@ def _run_gemini(file: UploadFile, data: bytes) -> dict:
 
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    try:
-        resp = client.models.generate_content(
-            model=model,
-            contents=parts,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM,
-                response_mime_type="application/json",
-                response_schema=_GEMINI_SCHEMA,
-                temperature=0,  # deterministic: same file -> same structured test
-            ),
-        )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"AI service error: {e}")
+    cfg = types.GenerateContentConfig(
+        system_instruction=SYSTEM,
+        response_mime_type="application/json",
+        response_schema=_GEMINI_SCHEMA,
+        temperature=0,  # deterministic: same file -> same structured test
+    )
+
+    # Gemini's free tier returns transient 503 (UNAVAILABLE) / 429 spikes —
+    # retry a few times with backoff before surfacing a friendly error.
+    resp = None
+    last_err = None
+    for attempt in range(4):
+        try:
+            resp = client.models.generate_content(model=model, contents=parts, config=cfg)
+            last_err = None
+            break
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            msg = str(e).lower()
+            transient = any(k in msg for k in (
+                "503", "unavailable", "overloaded", "high demand",
+                "429", "rate limit", "resource_exhausted", "timeout", "deadline",
+            ))
+            if transient and attempt < 3:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            break
+    if last_err is not None:
+        m = str(last_err).lower()
+        if any(k in m for k in ("503", "unavailable", "overloaded", "high demand", "429", "rate limit", "resource_exhausted")):
+            raise HTTPException(
+                503,
+                "The AI service is busy right now (high demand). Please wait a few "
+                "seconds and try Convert again.",
+            )
+        raise HTTPException(502, f"AI service error: {last_err}")
 
     raw = (resp.text or "").strip()
     if not raw:

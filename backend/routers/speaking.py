@@ -27,7 +27,7 @@ def _uid(x_user_id: Optional[str]) -> Optional[int]:
 def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
     uid = _uid(x_user_id)
     user = db.query(models.User).filter(models.User.id == uid).first() if uid else None
-    if not user or user.role != models.UserRole.teacher:
+    if not user or user.role not in (models.UserRole.teacher, models.UserRole.admin):
         raise HTTPException(403, "Teachers only.")
     return uid
 
@@ -71,6 +71,60 @@ def create_task(
     db.add(t)
     db.commit()
     return _task_out(t)
+
+
+class TaskPatchIn(BaseModel):
+    title: Optional[str] = None
+    prompt_md: Optional[str] = None
+    part: Optional[int] = None
+    prep_sec: Optional[int] = None
+    answer_sec: Optional[int] = None
+
+
+@router.patch("/tasks/{task_id}")
+def update_task(
+    task_id: int,
+    payload: TaskPatchIn,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    _require_teacher(db, x_user_id)
+    t = db.query(models.SpeakingTask).filter(models.SpeakingTask.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    if payload.title is not None:
+        if not payload.title.strip():
+            raise HTTPException(400, "Title cannot be empty.")
+        t.title = payload.title.strip()
+    if payload.prompt_md is not None:
+        t.prompt_md = payload.prompt_md
+    if payload.part is not None:
+        t.part = payload.part
+    if payload.prep_sec is not None:
+        t.prep_sec = payload.prep_sec
+    if payload.answer_sec is not None:
+        t.answer_sec = payload.answer_sec
+    db.commit()
+    return _task_out(t)
+
+
+@router.delete("/tasks/{task_id}")
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Delete a speaking task and its submissions. Teacher/admin."""
+    _require_teacher(db, x_user_id)
+    t = db.query(models.SpeakingTask).filter(models.SpeakingTask.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    db.query(models.SpeakingSubmission).filter(
+        models.SpeakingSubmission.task_id == task_id
+    ).delete(synchronize_session=False)
+    db.delete(t)
+    db.commit()
+    return {"ok": True, "deleted": task_id}
 
 
 @router.post("/submissions")
