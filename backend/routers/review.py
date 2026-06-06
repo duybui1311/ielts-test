@@ -32,6 +32,7 @@ def _require_teacher(db: Session, x_user_id: Optional[str]) -> int:
 class GradeIn(BaseModel):
     band: float
     feedback: str = ""
+    ai_result: Optional[dict] = None      # optional edited AI criterion breakdown to persist
 
 
 @router.get("/queue")
@@ -45,15 +46,17 @@ def queue(
         for u in db.query(models.User).all()
     }
 
+    # Queue = not-yet-approved work: fresh submissions plus AI drafts awaiting sign-off.
+    pending = ["submitted", "ai_graded"]
     writing = (
         db.query(models.WritingSubmission)
-        .filter(models.WritingSubmission.status == "submitted")
+        .filter(models.WritingSubmission.status.in_(pending))
         .order_by(models.WritingSubmission.created_at.asc())
         .all()
     )
     speaking = (
         db.query(models.SpeakingSubmission)
-        .filter(models.SpeakingSubmission.status == "submitted")
+        .filter(models.SpeakingSubmission.status.in_(pending))
         .order_by(models.SpeakingSubmission.created_at.asc())
         .all()
     )
@@ -68,6 +71,9 @@ def queue(
             "task_prompt": s.task.prompt_md if s.task else None,
             "word_count": s.word_count,
             "response_text": s.response_text,
+            "status": s.status,
+            "band": s.band,
+            "ai_result": s.ai_result,
             "created_at": s.created_at.isoformat() if s.created_at else None,
         })
     for s in speaking:
@@ -79,6 +85,9 @@ def queue(
             "task_prompt": s.task.prompt_md if s.task else None,
             "transcript": s.transcript,
             "audio_url": s.audio_url,
+            "status": s.status,
+            "band": s.band,
+            "ai_result": s.ai_result,
             "created_at": s.created_at.isoformat() if s.created_at else None,
         })
 
@@ -99,7 +108,10 @@ def grade_writing(
         raise HTTPException(404, "Submission not found")
     s.band = payload.band
     s.feedback = payload.feedback
+    if payload.ai_result is not None:
+        s.ai_result = payload.ai_result
     s.status = "reviewed"
+    s.approved_by_teacher = True          # a teacher-approved grade is visible to the student
     s.reviewed_by = uid
     s.reviewed_at = datetime.utcnow()
     db.commit()
@@ -119,7 +131,10 @@ def grade_speaking(
         raise HTTPException(404, "Submission not found")
     s.band = payload.band
     s.feedback = payload.feedback
+    if payload.ai_result is not None:
+        s.ai_result = payload.ai_result
     s.status = "reviewed"
+    s.approved_by_teacher = True
     s.reviewed_by = uid
     s.reviewed_at = datetime.utcnow()
     db.commit()
@@ -134,11 +149,12 @@ def pending_count(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ):
     _require_teacher(db, x_user_id)
+    pending = ["submitted", "ai_graded"]
     n = (
         db.query(models.WritingSubmission)
-        .filter(models.WritingSubmission.status == "submitted").count()
+        .filter(models.WritingSubmission.status.in_(pending)).count()
         + db.query(models.SpeakingSubmission)
-        .filter(models.SpeakingSubmission.status == "submitted").count()
+        .filter(models.SpeakingSubmission.status.in_(pending)).count()
     )
     return {"pending": n}
 

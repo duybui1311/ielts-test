@@ -5,9 +5,11 @@ import {
 } from "@mui/material";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import { apiFetch, API_BASE } from "../api";
 import { PageHeader } from "../component/ui";
 import AnnotatedText from "../component/AnnotatedText";
+import AiGrade from "../component/AiGrade";
 
 const BANDS = [];
 for (let b = 9; b >= 0; b -= 0.5) BANDS.push(b);
@@ -99,10 +101,28 @@ export default function Review() {
 }
 
 function GradePanel({ item, onGraded }) {
-  const [band, setBand] = useState(6.5);
+  const [aiResult, setAiResult] = useState(item.ai_result || null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [band, setBand] = useState(item.ai_result?.overall_band ?? 6.5);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const runAiGrade = async () => {
+    setAiLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/${item.kind}/submissions/${item.id}/ai-grade`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "AI grading failed.");
+      setAiResult(data.ai_result);
+      if (data.ai_result?.overall_band != null) setBand(data.ai_result.overall_band);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // Inline comments (writing only)
   const [comments, setComments] = useState([]);
@@ -153,7 +173,7 @@ function GradePanel({ item, onGraded }) {
     try {
       const res = await apiFetch(`/api/review/${item.kind}/${item.id}`, {
         method: "POST",
-        body: JSON.stringify({ band: Number(band), feedback }),
+        body: JSON.stringify({ band: Number(band), feedback, ai_result: aiResult }),
       });
       if (!res.ok) throw new Error("Could not save grade.");
       onGraded();
@@ -261,6 +281,22 @@ function GradePanel({ item, onGraded }) {
       )}
 
       <Divider sx={{ my: 2 }} />
+
+      {/* AI draft grade */}
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <Typography variant="subtitle2" color="text.secondary" sx={{ flexGrow: 1 }}>
+          AI grade {aiResult ? "(draft — review & approve)" : ""}
+        </Typography>
+        <Button
+          size="small" variant="outlined" startIcon={<AutoAwesomeRoundedIcon />}
+          onClick={runAiGrade} disabled={aiLoading}
+        >
+          {aiLoading ? "Grading…" : aiResult ? "Re-run AI grade" : "AI grade"}
+        </Button>
+      </Stack>
+      {aiResult && <Box sx={{ mb: 2 }}><AiGrade result={aiResult} headlineBand={Number(band)} /></Box>}
+
+      <Divider sx={{ my: 2 }} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
@@ -273,7 +309,7 @@ function GradePanel({ item, onGraded }) {
         />
       </Stack>
       <Button variant="contained" sx={{ mt: 2 }} disabled={submitting} onClick={submit}>
-        {submitting ? "Saving…" : "Submit grade"}
+        {submitting ? "Saving…" : aiResult ? "Approve & save" : "Submit grade"}
       </Button>
     </Card>
   );

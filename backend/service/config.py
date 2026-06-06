@@ -18,5 +18,8 @@ class Settings:
         self.API_PORT = int(os.getenv("API_PORT", "8000"))
         self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+        # When true, students see AI grades immediately (no teacher approval needed).
+        self.AI_GRADES_AUTO_VISIBLE = os.getenv("AI_GRADES_AUTO_VISIBLE", "false").lower() in ("1", "true", "yes")
+
 
 settings = Settings()

@@ -440,9 +440,11 @@ class WritingSubmission(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     response_text: Mapped[str] = mapped_column(Text, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")  # submitted | reviewed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")  # submitted | ai_graded | reviewed
     band: Mapped[Optional[float]] = mapped_column(Float)
     feedback: Mapped[Optional[str]] = mapped_column(Text)
+    ai_result: Mapped[Optional[dict]] = mapped_column(JSON)               # AI draft: criteria + tips
+    approved_by_teacher: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -471,9 +473,11 @@ class SpeakingSubmission(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     transcript: Mapped[Optional[str]] = mapped_column(Text)
     audio_url: Mapped[Optional[str]] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")  # submitted | ai_graded | reviewed
     band: Mapped[Optional[float]] = mapped_column(Float)
     feedback: Mapped[Optional[str]] = mapped_column(Text)
+    ai_result: Mapped[Optional[dict]] = mapped_column(JSON)               # AI draft: criteria + tips
+    approved_by_teacher: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -485,13 +489,15 @@ class SpeakingSubmission(Base):
 class ErrorTag(Base):
     __tablename__ = "error_tags"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station_attempt_id: Mapped[int] = mapped_column(
-        ForeignKey("station_attempts.id"), nullable=False
+    # Exam (reading/listening) error tags fill these; AI Writing/Speaking error
+    # tags leave them null (no station/exam), so they are nullable.
+    station_attempt_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("station_attempts.id"), nullable=True
     )
-    answer_id: Mapped[int] = mapped_column(ForeignKey("answers.id"), nullable=False)
+    answer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("answers.id"), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    exam_id: Mapped[int] = mapped_column(ForeignKey("exams.id"), nullable=False)
-    station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"), nullable=False)
+    exam_id: Mapped[Optional[int]] = mapped_column(ForeignKey("exams.id"), nullable=True)
+    station_id: Mapped[Optional[int]] = mapped_column(ForeignKey("stations.id"), nullable=True)
     skill: Mapped[Optional[str]] = mapped_column(String(20))
     question_type: Mapped[Optional[str]] = mapped_column(String(20))
     sub_skill: Mapped[Optional[str]] = mapped_column(String(50))

@@ -12,9 +12,20 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models, storage
+from backend.service import models, storage, ai_grading
+from backend.service.config import settings
 
 router = APIRouter(prefix="/api/speaking", tags=["speaking"])
+
+
+def _write_ai_error_tags(db: Session, *, user_id: int, skill: str, tags: list) -> None:
+    """Persist AI-found mistakes into the shared error_tags table (station/exam
+    FKs stay null for submissions) so they feed the analytics dashboard."""
+    for t in tags or []:
+        db.add(models.ErrorTag(
+            user_id=user_id, skill=skill, question_type=skill,
+            sub_skill=(t.get("category") or None),
+        ))
 
 
 def _uid(x_user_id: Optional[str]) -> Optional[int]:
@@ -163,6 +174,38 @@ async def submit(
     return {"id": sub.id, "status": sub.status, "audio_url": audio_url}
 
 
+@router.post("/submissions/{submission_id}/ai-grade")
+def ai_grade_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Run Gemini grading on the transcript and store a DRAFT (status
+    'ai_graded'). Teacher-only; students don't see it until approved."""
+    _require_teacher(db, x_user_id)
+    s = db.query(models.SpeakingSubmission).filter(models.SpeakingSubmission.id == submission_id).first()
+    if not s:
+        raise HTTPException(404, "Submission not found")
+    if not (s.transcript or "").strip():
+        raise HTTPException(400, "This submission has no transcript to grade.")
+    task = s.task
+    try:
+        result = ai_grading.grade_speaking(s.transcript, task.prompt_md if task else "")
+    except ai_grading.AIGradingError as e:
+        busy = "busy" in str(e).lower()
+        raise HTTPException(503 if busy else 502, str(e))
+
+    first_time = s.status == "submitted"
+    s.ai_result = result
+    s.band = result.get("overall_band")
+    s.status = "ai_graded"
+    s.approved_by_teacher = False
+    if first_time:
+        _write_ai_error_tags(db, user_id=s.user_id, skill="speaking", tags=result.get("error_tags"))
+    db.commit()
+    return {"id": s.id, "status": s.status, "ai_result": result}
+
+
 @router.get("/submissions")
 def my_submissions(
     db: Session = Depends(get_db),
@@ -177,18 +220,20 @@ def my_submissions(
         .order_by(models.SpeakingSubmission.created_at.desc())
         .all()
     )
-    return [
-        {
+    out = []
+    for s in subs:
+        visible = s.approved_by_teacher or settings.AI_GRADES_AUTO_VISIBLE
+        out.append({
             "id": s.id,
             "task_title": s.task.title if s.task else "Speaking task",
             "part": s.task.part if s.task else None,
             "transcript": s.transcript,
             "audio_url": s.audio_url,
-            "status": s.status,
-            "band": s.band,
-            "feedback": s.feedback,
+            "status": "reviewed" if visible else "submitted",
+            "band": s.band if visible else None,
+            "feedback": s.feedback if visible else None,
+            "ai_result": s.ai_result if visible else None,
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
-        }
-        for s in subs
-    ]
+        })
+    return out

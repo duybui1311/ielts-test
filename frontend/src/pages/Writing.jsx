@@ -9,6 +9,7 @@ import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateR
 import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
 import AnnotatedText from "../component/AnnotatedText";
+import AiGrade from "../component/AiGrade";
 
 function isTeacher() {
   try {
@@ -123,6 +124,12 @@ export default function Writing({ embedded = false }) {
                   <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
                     <strong>Teacher feedback:</strong> {s.feedback}
                   </Alert>
+                )}
+
+                {s.ai_result && (
+                  <Box sx={{ mt: 1.5 }}>
+                    <AiGrade result={s.ai_result} headlineBand={s.band} />
+                  </Box>
                 )}
 
                 {(s.comments?.length > 0) && (

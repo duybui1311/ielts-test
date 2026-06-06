@@ -8,6 +8,7 @@ import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import StopRoundedIcon from "@mui/icons-material/StopRounded";
 import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
+import AiGrade from "../component/AiGrade";
 
 const SR = typeof window !== "undefined"
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -109,6 +110,11 @@ export default function Speaking({ embedded = false }) {
                   <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
                     <strong>Teacher feedback:</strong> {s.feedback}
                   </Alert>
+                )}
+                {s.ai_result && (
+                  <Box sx={{ mt: 1.5 }}>
+                    <AiGrade result={s.ai_result} headlineBand={s.band} />
+                  </Box>
                 )}
               </Box>
             </React.Fragment>

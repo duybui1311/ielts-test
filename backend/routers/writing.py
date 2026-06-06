@@ -10,9 +10,21 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models, storage
+from backend.service import models, storage, ai_grading
+from backend.service.config import settings
 
 router = APIRouter(prefix="/api/writing", tags=["writing"])
+
+
+def _write_ai_error_tags(db: Session, *, user_id: int, skill: str, tags: list) -> None:
+    """Persist AI-found mistakes into the shared error_tags table so Writing/
+    Speaking weaknesses appear on the same analytics dashboard. No station/exam
+    for submissions, so those FKs stay null."""
+    for t in tags or []:
+        db.add(models.ErrorTag(
+            user_id=user_id, skill=skill, question_type=skill,
+            sub_skill=(t.get("category") or None),
+        ))
 
 
 def _uid(x_user_id: Optional[str]) -> Optional[int]:
@@ -187,6 +199,40 @@ def submit(
     return {"id": sub.id, "status": sub.status, "word_count": sub.word_count}
 
 
+@router.post("/submissions/{submission_id}/ai-grade")
+def ai_grade_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+):
+    """Run Gemini grading and store a DRAFT (status 'ai_graded', not yet approved).
+    Teacher-only — students never see the result until a teacher approves it."""
+    _require_teacher(db, x_user_id)
+    s = db.query(models.WritingSubmission).filter(models.WritingSubmission.id == submission_id).first()
+    if not s:
+        raise HTTPException(404, "Submission not found")
+    task = s.task
+    try:
+        result = ai_grading.grade_writing(
+            s.response_text,
+            task.prompt_md if task else "",
+            task.task_type if task else "task2",
+        )
+    except ai_grading.AIGradingError as e:
+        busy = "busy" in str(e).lower()
+        raise HTTPException(503 if busy else 502, str(e))
+
+    first_time = s.status == "submitted"
+    s.ai_result = result
+    s.band = result.get("overall_band")
+    s.status = "ai_graded"
+    s.approved_by_teacher = False
+    if first_time:                       # avoid duplicate tags on re-grade
+        _write_ai_error_tags(db, user_id=s.user_id, skill="writing", tags=result.get("error_tags"))
+    db.commit()
+    return {"id": s.id, "status": s.status, "ai_result": result}
+
+
 @router.get("/submissions")
 def my_submissions(
     db: Session = Depends(get_db),
@@ -217,19 +263,23 @@ def my_submissions(
                 "quote": c.quote,
                 "comment": c.comment,
             })
-    return [
-        {
+    out = []
+    for s in subs:
+        # Students only see a grade once a teacher approves it (or if the
+        # AI_GRADES_AUTO_VISIBLE setting is on).
+        visible = s.approved_by_teacher or settings.AI_GRADES_AUTO_VISIBLE
+        out.append({
             "id": s.id,
             "task_title": s.task.title if s.task else "Writing task",
             "task_type": s.task.task_type if s.task else None,
             "word_count": s.word_count,
-            "status": s.status,
-            "band": s.band,
-            "feedback": s.feedback,
+            "status": "reviewed" if visible else "submitted",
+            "band": s.band if visible else None,
+            "feedback": s.feedback if visible else None,
+            "ai_result": s.ai_result if visible else None,
             "response_text": s.response_text,
             "comments": comments_by_sub.get(s.id, []),
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
-        }
-        for s in subs
-    ]
+        })
+    return out
