@@ -69,6 +69,14 @@ def list_tasks(db: Session = Depends(get_db)):
     return [_task_out(t) for t in tasks]
 
 
+@router.get("/tasks/{task_id}")
+def get_task(task_id: int, db: Session = Depends(get_db)):
+    t = db.query(models.WritingTask).filter(models.WritingTask.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    return _task_out(t)
+
+
 @router.post("/tasks")
 def create_task(
     payload: TaskIn,

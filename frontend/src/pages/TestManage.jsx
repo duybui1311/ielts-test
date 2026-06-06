@@ -2,13 +2,14 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Button, Chip, IconButton, CircularProgress,
   Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Tooltip, InputAdornment, MenuItem,
+  Tooltip, InputAdornment, Menu, MenuItem,
 } from "@mui/material";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import DriveFileRenameOutlineRoundedIcon from "@mui/icons-material/DriveFileRenameOutlineRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddBoxRoundedIcon from "@mui/icons-material/AddBoxRounded";
+import ArrowDropDownRoundedIcon from "@mui/icons-material/ArrowDropDownRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, getUserId } from "../api";
@@ -45,7 +46,7 @@ export default function TestManage() {
   const [renameFor, setRenameFor] = useState(null);
   const [renameVal, setRenameVal] = useState("");
   const [deleteFor, setDeleteFor] = useState(null);
-  const [editTask, setEditTask] = useState(null);   // { ...item } for writing/speaking
+  const [createAnchor, setCreateAnchor] = useState(null);   // "Create" menu
 
   const load = () => {
     setLoading(true);
@@ -80,7 +81,7 @@ export default function TestManage() {
 
   const editItem = (it) => {
     if (it.type === "exam") navigate(`/create-exam?edit=${it.id}`);
-    else setEditTask(it);
+    else navigate(`/task/${it.type}/${it.id}`);
   };
 
   const submitRename = async () => {
@@ -127,9 +128,19 @@ export default function TestManage() {
         title="Test Manage"
         subtitle="Edit, rename, delete or take any test — including Writing & Speaking tasks."
         action={
-          <Button variant="contained" startIcon={<AddBoxRoundedIcon />} onClick={() => navigate("/create-exam")}>
-            Create Exam
-          </Button>
+          <>
+            <Button
+              variant="contained" startIcon={<AddBoxRoundedIcon />} endIcon={<ArrowDropDownRoundedIcon />}
+              onClick={(e) => setCreateAnchor(e.currentTarget)}
+            >
+              Create
+            </Button>
+            <Menu anchorEl={createAnchor} open={!!createAnchor} onClose={() => setCreateAnchor(null)}>
+              <MenuItem onClick={() => { setCreateAnchor(null); navigate("/create-exam"); }}>Reading / Listening exam</MenuItem>
+              <MenuItem onClick={() => { setCreateAnchor(null); navigate("/task/writing/new"); }}>Writing task</MenuItem>
+              <MenuItem onClick={() => { setCreateAnchor(null); navigate("/task/speaking/new"); }}>Speaking task</MenuItem>
+            </Menu>
+          </>
         }
       />
 
@@ -217,75 +228,8 @@ export default function TestManage() {
         </DialogActions>
       </Dialog>
 
-      {/* Task editor (writing/speaking) */}
-      <TaskEditDialog
-        item={editTask}
-        onClose={() => setEditTask(null)}
-        onSaved={(updated) => {
-          setItems((xs) => xs.map((x) => (x.type === updated.type && x.id === updated.id ? { ...x, name: updated.name, raw: updated.raw } : x)));
-          setEditTask(null);
-          setToast("Task updated.");
-        }}
-        onError={setError}
-      />
-
       <Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast("")} message={toast}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }} />
     </Box>
-  );
-}
-
-function TaskEditDialog({ item, onClose, onSaved, onError }) {
-  const [title, setTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [num, setNum] = useState(0);    // time_limit_min (writing) or part (speaking)
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!item) return;
-    setTitle(item.name || "");
-    setPrompt(item.raw?.prompt_md || "");
-    setNum(item.type === "writing" ? (item.raw?.time_limit_min || 20) : (item.raw?.part || 1));
-  }, [item]);
-
-  if (!item) return null;
-  const isWriting = item.type === "writing";
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const body = isWriting
-        ? { title, prompt_md: prompt, time_limit_min: Number(num) || 20 }
-        : { title, prompt_md: prompt, part: Number(num) || 1 };
-      const res = await apiFetch(`/api/${item.type}/tasks/${item.id}`, { method: "PATCH", body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Could not save.");
-      onSaved({ ...item, name: data.title, raw: data });
-    } catch (e) { onError(e.message); } finally { setSaving(false); }
-  };
-
-  return (
-    <Dialog open={!!item} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Edit {isWriting ? "writing" : "speaking"} task</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-          <TextField label="Prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} fullWidth multiline minRows={4} />
-          {isWriting ? (
-            <TextField label="Time limit (min)" type="number" value={num} onChange={(e) => setNum(e.target.value)} sx={{ maxWidth: 200 }} />
-          ) : (
-            <TextField select label="Part" value={num} onChange={(e) => setNum(e.target.value)} sx={{ maxWidth: 200 }}>
-              {[1, 2, 3].map((p) => <MenuItem key={p} value={p}>Part {p}</MenuItem>)}
-            </TextField>
-          )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={save} disabled={saving || !title.trim()}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </DialogActions>
-    </Dialog>
   );
 }

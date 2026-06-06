@@ -22,9 +22,10 @@ const TABS = [
   { key: "speaking", label: "Speaking", icon: <MicRoundedIcon /> },
 ];
 
-function ExamGrid({ exams, skill, starting, onStart }) {
+function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, heading = null }) {
   const list = exams.filter((e) => ((e.skills && e.skills[0]) || "reading") === skill);
   if (list.length === 0) {
+    if (hideWhenEmpty) return null;
     return (
       <Card variant="outlined" sx={{ p: 4, textAlign: "center", bgcolor: "transparent" }}>
         <Typography color="text.secondary">No {skill} tests yet.</Typography>
@@ -32,7 +33,9 @@ function ExamGrid({ exams, skill, starting, onStart }) {
     );
   }
   return (
-    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 2 }}>
+    <Box sx={{ mb: heading ? 3 : 0 }}>
+      {heading && <Typography variant="subtitle1" sx={{ mb: 1.5 }}>{heading}</Typography>}
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 2 }}>
       {list.map((exam) => (
         <Card key={exam.id} sx={{ display: "flex", flexDirection: "column", transition: "transform .15s ease", "&:hover": { transform: "translateY(-3px)" } }}>
           <CardContent sx={{ flexGrow: 1 }}>
@@ -59,6 +62,7 @@ function ExamGrid({ exams, skill, starting, onStart }) {
           </CardActions>
         </Card>
       ))}
+      </Box>
     </Box>
   );
 }
@@ -123,8 +127,18 @@ export default function ExamList() {
 
       {skill === "reading" && <ExamGrid exams={exams} skill="reading" starting={starting} onStart={handleStart} />}
       {skill === "listening" && <ExamGrid exams={exams} skill="listening" starting={starting} onStart={handleStart} />}
-      {skill === "writing" && <Writing embedded />}
-      {skill === "speaking" && <Speaking embedded />}
+      {skill === "writing" && (
+        <>
+          <ExamGrid exams={exams} skill="writing" starting={starting} onStart={handleStart} hideWhenEmpty heading="Exam-based tests" />
+          <Writing embedded />
+        </>
+      )}
+      {skill === "speaking" && (
+        <>
+          <ExamGrid exams={exams} skill="speaking" starting={starting} onStart={handleStart} hideWhenEmpty heading="Exam-based tests" />
+          <Speaking embedded />
+        </>
+      )}
     </Box>
   );
 }

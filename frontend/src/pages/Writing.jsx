@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Card, CardActionArea, Stack, Typography, Button, Chip, TextField,
-  CircularProgress, Alert, Divider, LinearProgress, Collapse,
+  CircularProgress, Alert, Divider, LinearProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from "@mui/material";
+import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
@@ -30,7 +32,7 @@ export default function Writing({ embedded = false }) {
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
-  const [expanded, setExpanded] = useState({}); // submission id -> show annotated essay
+  const [viewSub, setViewSub] = useState(null);  // submission shown in the result dialog
 
   const loadSubs = useCallback(() => {
     apiFetch("/api/writing/submissions")
@@ -108,62 +110,73 @@ export default function Writing({ embedded = false }) {
           {subs.map((s, i) => (
             <React.Fragment key={s.id}>
               {i > 0 && <Divider />}
-              <Box sx={{ p: 2.5 }}>
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                    <Typography fontWeight={600} noWrap>{s.task_title}</Typography>
-                    <Typography variant="caption" color="text.secondary">{s.word_count} words</Typography>
-                  </Box>
-                  {s.status === "reviewed" ? (
-                    <Typography variant="h6" fontWeight={800} color={bandColor(s.band)}>{s.band}</Typography>
-                  ) : (
-                    <Chip size="small" color="warning" label="Awaiting review" />
-                  )}
-                </Stack>
-                {s.status === "reviewed" && s.feedback && (
-                  <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
-                    <strong>Teacher feedback:</strong> {s.feedback}
-                  </Alert>
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ p: 2.5 }}>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography fontWeight={600} noWrap>{s.task_title}</Typography>
+                  <Typography variant="caption" color="text.secondary">{s.word_count} words</Typography>
+                </Box>
+                {s.status === "reviewed" ? (
+                  <Typography variant="h6" fontWeight={800} color={bandColor(s.band)}>{s.band}</Typography>
+                ) : (
+                  <Chip size="small" color="warning" label="Awaiting review" />
                 )}
-
-                {s.ai_result && (
-                  <Box sx={{ mt: 1.5 }}>
-                    <AiGrade result={s.ai_result} headlineBand={s.band} />
-                  </Box>
-                )}
-
-                {(s.comments?.length > 0) && (
-                  <Box sx={{ mt: 1.5 }}>
-                    <Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
-                        Inline comments ({s.comments.length})
-                      </Typography>
-                      <Button size="small" onClick={() => setExpanded((m) => ({ ...m, [s.id]: !m[s.id] }))}>
-                        {expanded[s.id] ? "Hide essay" : "Show in essay"}
-                      </Button>
-                    </Stack>
-                    <Collapse in={!!expanded[s.id]}>
-                      <Card variant="outlined" sx={{ p: 2, mb: 1.5, boxShadow: "none" }}>
-                        <AnnotatedText text={s.response_text || ""} comments={s.comments} />
-                      </Card>
-                    </Collapse>
-                    <Stack spacing={0.75}>
-                      {s.comments.map((c) => (
-                        <Box key={c.id} sx={{ borderLeft: "3px solid", borderColor: "warning.main", pl: 1.25 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} display="block">
-                            “{c.quote}”
-                          </Typography>
-                          <Typography variant="body2">{c.comment}</Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-              </Box>
+                <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => setViewSub(s)}>
+                  View result
+                </Button>
+              </Stack>
             </React.Fragment>
           ))}
         </Card>
       )}
+
+      {/* Result viewer: the student's own essay + grade + feedback + comments */}
+      <Dialog open={!!viewSub} onClose={() => setViewSub(null)} fullWidth maxWidth="md" scroll="paper">
+        <DialogTitle>{viewSub?.task_title}</DialogTitle>
+        <DialogContent dividers>
+          {viewSub && (
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip size="small" label={`${viewSub.word_count} words`} />
+                {viewSub.status === "reviewed" ? (
+                  <Chip size="small" color="success" label={`Band ${viewSub.band}`} />
+                ) : (
+                  <Chip size="small" color="warning" label="Awaiting review" />
+                )}
+              </Stack>
+
+              <Box>
+                <Typography variant="caption" color="text.secondary">Your response</Typography>
+                <Card variant="outlined" sx={{ p: 2, mt: 0.5, boxShadow: "none" }}>
+                  <AnnotatedText text={viewSub.response_text || ""} comments={viewSub.comments || []} />
+                </Card>
+              </Box>
+
+              {viewSub.status === "reviewed" && viewSub.feedback && (
+                <Alert severity="info" icon={false}><strong>Teacher feedback:</strong> {viewSub.feedback}</Alert>
+              )}
+
+              {viewSub.ai_result && <AiGrade result={viewSub.ai_result} headlineBand={viewSub.band} />}
+
+              {(viewSub.comments?.length > 0) && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Inline comments ({viewSub.comments.length})</Typography>
+                  <Stack spacing={0.75}>
+                    {viewSub.comments.map((c) => (
+                      <Box key={c.id} sx={{ borderLeft: "3px solid", borderColor: "warning.main", pl: 1.25 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }} display="block">“{c.quote}”</Typography>
+                        <Typography variant="body2">{c.comment}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewSub(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

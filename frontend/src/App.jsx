@@ -12,6 +12,7 @@ import CreateNewExam from "./pages/CreateNewExam";
 import FlashcardPage from "./pages/flashcard";
 import ExamList from "./pages/ExamList";
 import TestManage from "./pages/TestManage";
+import TaskEdit from "./pages/TaskEdit";
 import Admin from "./pages/Admin";
 import ExamTake from "./pages/ExamTake";
 import ExamResults from "./pages/ExamResults";
@@ -34,6 +35,7 @@ function PrivateLayout() {
         if (p.startsWith("/dashboard"))         return "dashboard";
         if (p.startsWith("/teacher_dashboard")) return "teacher";
         if (p.startsWith("/manage-tests"))      return "manage";
+        if (p.startsWith("/task/"))             return "manage";
         if (p.startsWith("/admin"))             return "admin";
         if (p.startsWith("/create-exam"))       return "create";
         if (p.startsWith("/writing"))           return "writing";
@@ -89,6 +91,7 @@ export default function App() {
                         <Route path="/dashboard"           element={<Dashboard />} />
                         <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
                         <Route path="/manage-tests"        element={<TestManage />} />
+                        <Route path="/task/:kind/:taskId"  element={<TaskEdit />} />
                         <Route path="/admin"               element={<Admin />} />
                         <Route path="/create-exam"         element={<CreateNewExam />} />
                         <Route path="/writing"             element={<Writing />} />

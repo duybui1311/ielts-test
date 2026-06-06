@@ -33,6 +33,7 @@ class GradeIn(BaseModel):
     band: float
     feedback: str = ""
     ai_result: Optional[dict] = None      # optional edited AI criterion breakdown to persist
+    share_ai: bool = True                 # if False, the AI breakdown is not shown to the student
 
 
 @router.get("/queue")
@@ -108,7 +109,9 @@ def grade_writing(
         raise HTTPException(404, "Submission not found")
     s.band = payload.band
     s.feedback = payload.feedback
-    if payload.ai_result is not None:
+    if not payload.share_ai:
+        s.ai_result = None                # teacher chose not to share the AI breakdown
+    elif payload.ai_result is not None:
         s.ai_result = payload.ai_result
     s.status = "reviewed"
     s.approved_by_teacher = True          # a teacher-approved grade is visible to the student
@@ -131,7 +134,9 @@ def grade_speaking(
         raise HTTPException(404, "Submission not found")
     s.band = payload.band
     s.feedback = payload.feedback
-    if payload.ai_result is not None:
+    if not payload.share_ai:
+        s.ai_result = None
+    elif payload.ai_result is not None:
         s.ai_result = payload.ai_result
     s.status = "reviewed"
     s.approved_by_teacher = True

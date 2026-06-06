@@ -2,10 +2,12 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Box, Card, CardActionArea, Stack, Typography, Button, Chip, TextField,
   CircularProgress, Alert, Divider, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import StopRoundedIcon from "@mui/icons-material/StopRounded";
+import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import { apiFetch, API_BASE, getUserId } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
 import AiGrade from "../component/AiGrade";
@@ -19,6 +21,7 @@ export default function Speaking({ embedded = false }) {
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
+  const [viewSub, setViewSub] = useState(null);
 
   const loadSubs = useCallback(() => {
     apiFetch("/api/speaking/submissions")
@@ -91,36 +94,61 @@ export default function Speaking({ embedded = false }) {
           {subs.map((s, i) => (
             <React.Fragment key={s.id}>
               {i > 0 && <Divider />}
-              <Box sx={{ p: 2.5 }}>
-                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
-                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                    <Typography fontWeight={600} noWrap>{s.task_title}</Typography>
-                    <Typography variant="caption" color="text.secondary">Part {s.part}</Typography>
-                  </Box>
-                  {s.status === "reviewed" ? (
-                    <Typography variant="h6" fontWeight={800} color={bandColor(s.band)}>{s.band}</Typography>
-                  ) : (
-                    <Chip size="small" color="warning" label="Awaiting review" />
-                  )}
-                </Stack>
-                {s.audio_url && (
-                  <Box component="audio" controls src={`${API_BASE}${s.audio_url}`} sx={{ width: "100%", mt: 1 }} />
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ p: 2.5 }}>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography fontWeight={600} noWrap>{s.task_title}</Typography>
+                  <Typography variant="caption" color="text.secondary">Part {s.part}</Typography>
+                </Box>
+                {s.status === "reviewed" ? (
+                  <Typography variant="h6" fontWeight={800} color={bandColor(s.band)}>{s.band}</Typography>
+                ) : (
+                  <Chip size="small" color="warning" label="Awaiting review" />
                 )}
-                {s.status === "reviewed" && s.feedback && (
-                  <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
-                    <strong>Teacher feedback:</strong> {s.feedback}
-                  </Alert>
-                )}
-                {s.ai_result && (
-                  <Box sx={{ mt: 1.5 }}>
-                    <AiGrade result={s.ai_result} headlineBand={s.band} />
-                  </Box>
-                )}
-              </Box>
+                <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => setViewSub(s)}>
+                  View result
+                </Button>
+              </Stack>
             </React.Fragment>
           ))}
         </Card>
       )}
+
+      {/* Result viewer: recording + transcript + grade + feedback */}
+      <Dialog open={!!viewSub} onClose={() => setViewSub(null)} fullWidth maxWidth="md" scroll="paper">
+        <DialogTitle>{viewSub?.task_title}</DialogTitle>
+        <DialogContent dividers>
+          {viewSub && (
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip size="small" label={`Part ${viewSub.part}`} />
+                {viewSub.status === "reviewed" ? (
+                  <Chip size="small" color="success" label={`Band ${viewSub.band}`} />
+                ) : (
+                  <Chip size="small" color="warning" label="Awaiting review" />
+                )}
+              </Stack>
+              {viewSub.audio_url && (
+                <Box component="audio" controls src={`${API_BASE}${viewSub.audio_url}`} sx={{ width: "100%" }} />
+              )}
+              <Box>
+                <Typography variant="caption" color="text.secondary">Transcript</Typography>
+                <Card variant="outlined" sx={{ p: 2, mt: 0.5, boxShadow: "none" }}>
+                  <Typography sx={{ whiteSpace: "pre-wrap" }} color={viewSub.transcript ? "text.primary" : "text.disabled"}>
+                    {viewSub.transcript || "(no transcript)"}
+                  </Typography>
+                </Card>
+              </Box>
+              {viewSub.status === "reviewed" && viewSub.feedback && (
+                <Alert severity="info" icon={false}><strong>Teacher feedback:</strong> {viewSub.feedback}</Alert>
+              )}
+              {viewSub.ai_result && <AiGrade result={viewSub.ai_result} headlineBand={viewSub.band} />}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewSub(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

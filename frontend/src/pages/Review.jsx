@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Card, Stack, Typography, Button, Chip, TextField, MenuItem,
-  CircularProgress, Alert, Divider, IconButton, Tooltip,
+  CircularProgress, Alert, Divider, IconButton, Tooltip, Checkbox, FormControlLabel,
 } from "@mui/material";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
@@ -103,6 +103,7 @@ export default function Review() {
 function GradePanel({ item, onGraded }) {
   const [aiResult, setAiResult] = useState(item.ai_result || null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [shareAi, setShareAi] = useState(true);
   const [band, setBand] = useState(item.ai_result?.overall_band ?? 6.5);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -173,7 +174,7 @@ function GradePanel({ item, onGraded }) {
     try {
       const res = await apiFetch(`/api/review/${item.kind}/${item.id}`, {
         method: "POST",
-        body: JSON.stringify({ band: Number(band), feedback, ai_result: aiResult }),
+        body: JSON.stringify({ band: Number(band), feedback, ai_result: aiResult, share_ai: shareAi }),
       });
       if (!res.ok) throw new Error("Could not save grade.");
       onGraded();
@@ -294,7 +295,13 @@ function GradePanel({ item, onGraded }) {
           {aiLoading ? "Grading…" : aiResult ? "Re-run AI grade" : "AI grade"}
         </Button>
       </Stack>
-      {aiResult && <Box sx={{ mb: 2 }}><AiGrade result={aiResult} headlineBand={Number(band)} /></Box>}
+      {aiResult && <Box sx={{ mb: 1 }}><AiGrade result={aiResult} headlineBand={Number(band)} /></Box>}
+      {aiResult && (
+        <FormControlLabel
+          control={<Checkbox checked={shareAi} onChange={(e) => setShareAi(e.target.checked)} />}
+          label="Share the AI assessment with the student"
+        />
+      )}
 
       <Divider sx={{ my: 2 }} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
