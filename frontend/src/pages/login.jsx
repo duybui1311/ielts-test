@@ -1,7 +1,7 @@
 import * as React from "react";
 import {
 	Box, Paper, Stack, TextField, Button, Typography,
-	InputAdornment, IconButton, Alert, Chip,
+	InputAdornment, IconButton, Alert,
 } from "@mui/material";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
@@ -105,12 +105,6 @@ export default function Login() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const fillDemo = (kind) => {
-		setIdentifier(kind === "teacher" ? "teacher@demo.io" : "student@demo.io");
-		setPassword("demo1234");
-		setError("");
-	};
-
 	const onSubmit = async (e) => {
 		e.preventDefault();
 		setError("");
@@ -210,7 +204,7 @@ export default function Login() {
 						<TextField
 							label="Email or username"
 							type="text"
-							autoComplete="username"
+							autoComplete="off"
 							value={identifier}
 							onChange={(e) => setIdentifier(e.target.value)}
 							fullWidth
@@ -229,7 +223,7 @@ export default function Login() {
 						<TextField
 							label="Password"
 							type={show ? "text" : "password"}
-							autoComplete="current-password"
+							autoComplete="new-password"
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
 							fullWidth
@@ -271,16 +265,6 @@ export default function Login() {
 								Create an account
 							</Button>
 						</Typography>
-
-						<Box>
-							<Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-								Try a demo account:
-							</Typography>
-							<Stack direction="row" spacing={1}>
-								<Chip label="Student demo" variant="outlined" onClick={() => fillDemo("student")} />
-								<Chip label="Teacher demo" variant="outlined" onClick={() => fillDemo("teacher")} />
-							</Stack>
-						</Box>
 					</Stack>
 				</Paper>
 			</Box>
