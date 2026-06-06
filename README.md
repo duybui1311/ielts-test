@@ -1,28 +1,38 @@
 # IELTS Platform
 
-A simple web app for practising IELTS tests. Students take Reading and Listening
-tests and get an **instant band score** plus a breakdown of the question types
-they get wrong most often. Teachers build tests and watch how their class is
-doing. Vocabulary flashcards are built in.
+A web app for practising and marking IELTS tests across **all four skills**.
+Students take Reading and Listening tests with **instant band scores**, and
+practise Writing and Speaking that are **graded by AI and reviewed by a teacher**.
+Teachers build tests (by hand or with an AI importer), mark work with inline
+comments, and track how their class is doing.
 
-> This is a **test version** — sign-in is simplified and Writing/Speaking are
-> saved for manual marking (automatic AI grading is planned). See
+> This is a **test version** — sign-in is simplified (no JWT yet). See
 > [`CLAUDE.md`](./CLAUDE.md) for the deep technical reference.
 
 ---
 
 ## Features
 
-- **Take a test** — answer Reading/Listening questions inline; answers save as
-  you go and the test auto-submits when the timer ends.
+- **Take a test** — Reading/Listening questions answered inline, numbered like a
+  real IELTS paper; answers autosave, a question navigator shows progress, and the
+  test auto-submits when the timer ends.
 - **Instant results** — overall band, per-question breakdown, and a chart of your
   most common mistake types.
-- **Student dashboard** — band trend over time, KPIs, and recent tests.
-- **Teacher dashboard** — classes, exams, class-average trend and recent
-  submissions.
-- **Create exams** — a visual builder for teachers (no JSON required).
-- **Flashcards** — build decks and study them in flip-card mode.
-- **Light & dark mode** — toggle in the sidebar, remembered per device.
+- **Writing & Speaking** — students submit essays / recorded answers as **tasks**;
+  they're graded by **AI (Google Gemini)** against the official band descriptors
+  (per-criterion bands, error tags, improvement tips), then a **teacher reviews,
+  edits and approves** before the student sees the grade.
+- **Inline comments** — teachers highlight any span of a student's writing and
+  attach a margin note, Google-Docs style; students see the highlights on their
+  result page.
+- **AI test importer** — upload a PDF/Word/image of a test and Gemini converts it
+  into the visual builder for review before saving.
+- **Test Manage** (teacher/admin) — create, edit, rename, delete, search and sort
+  every test and task; take any test yourself.
+- **Dashboards** — student band trend + weak spots (including Writing/Speaking);
+  teacher class average, attempts and recent submissions.
+- **Admin area** — manage users (roles, activation, deletion) and all tests.
+- **Flashcards**, **light/dark mode**, profile & password settings.
 
 ---
 
@@ -36,14 +46,24 @@ doing. Vocabulary flashcards are built in.
 Create `backend/.env`:
 
 ```
-DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:5432/postgres
 API_HOST=0.0.0.0
 API_PORT=8000
 FRONTEND_URL=http://localhost:3000
+
+# Optional — AI test importer & AI Writing/Speaking grading (Google Gemini)
+GEMINI_API_KEY=
+LLM_PROVIDER=gemini
+# AI_GRADES_AUTO_VISIBLE=false   # true = students see AI grades without teacher approval
+
+# Optional — uploads (Writing charts, Listening/Speaking audio) via Supabase Storage
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
 ```
 
 Use the **Session Pooler** URL from Supabase → Project Settings → Database.
 (The direct connection is IPv6-only and won't work from most machines.)
+The Supabase **service key is server-side only** — never expose it to the browser.
 
 ### 2. Start the backend
 
@@ -63,15 +83,16 @@ API: http://localhost:8000 · interactive docs: http://localhost:8000/docs
 python -m backend.seed
 ```
 
-This creates a demo teacher and student, one IELTS test, some flashcards, and a
-sample graded result so every page has something to show.
+This creates demo accounts, an IELTS test, flashcards, and a sample graded
+result so every page has something to show.
 
-**Demo logins** (password `demo1234` for both):
+**Demo logins:**
 
-| Role    | Email              |
-|---------|--------------------|
-| Student | `student@demo.io`  |
-| Teacher | `teacher@demo.io`  |
+| Role    | Email              | Password    |
+|---------|--------------------|-------------|
+| Student | `student@demo.io`  | `demo1234`  |
+| Teacher | `teacher@demo.io`  | `demo1234`  |
+| Admin   | `admin@demo.io`    | `admin1234` |
 
 ### 4. Start the frontend
 
@@ -89,18 +110,24 @@ Open http://localhost:3000 and sign in with a demo account. The frontend proxies
 ## How to use it
 
 **As a student**
-1. **My Tests** → pick a test → **Start Test**.
-2. Answer the questions — they save automatically. Submit (or let the timer
-   submit for you).
-3. See your **band score and breakdown**, then check the **Dashboard** for your
-   trend and weak spots. Review vocabulary under **Flashcards**.
+1. **My Tests** has a tab per skill. Reading/Listening → **Start Test**, answer
+   (answers autosave), submit, and see your **band + breakdown**.
+2. **Writing/Speaking** tabs → open a task, write or record, and submit. Once your
+   teacher approves the grade, open **View result** to see your band, the AI
+   criterion breakdown, tips, feedback and any inline comments on your writing.
+3. Check the **Dashboard** for your trend and weak spots; review **Flashcards**.
 
 **As a teacher**
-1. **Create Exam** → name the test, add Reading/Listening sections with a
-   passage, then add multiple-choice / short-answer questions and mark the
-   correct answers → **Save**. It instantly appears in students' My Tests.
-2. Watch progress on the **Class Dashboard** (class average, attempts, recent
-   submissions).
+1. **Test Manage → Create ▾**: a **Reading/Listening test** (skill-first visual
+   builder, or use **Import from file (AI)**), or a **Writing/Speaking task**.
+2. **Review** pending submissions: click **AI grade** for a draft, optionally add
+   inline comments on the essay, choose whether to share the AI breakdown, then
+   **Approve & save**. (Self-sign-up is students only; teacher accounts are seeded
+   or made by an admin.)
+3. Watch progress on the **Class Dashboard**.
+
+**As an admin**
+- **Admin** → site stats, manage users (role / active / delete) and all tests.
 
 ---
 
@@ -108,6 +135,7 @@ Open http://localhost:3000 and sign in with a demo account. The frontend proxies
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2 (Postgres / Supabase)
 - **Frontend:** React 19 + Vite, MUI, Recharts
+- **AI:** Google Gemini (`google-genai`) for the test importer and Writing/Speaking grading
 - **Auto-grading:** Reading & Listening scored on submit; raw score → IELTS band
 
 ---
@@ -120,8 +148,10 @@ Open http://localhost:3000 and sign in with a demo account. The frontend proxies
   port 8000 and `backend/.env` has a valid `DATABASE_URL`.
 - **Database connection hangs** — use the Supabase **Session Pooler** URL
   (port 5432), not the direct connection.
-- **Frontend can't reach the API** — start the backend first; the dev server
-  proxies `/api` to `http://localhost:8000`.
+- **AI import/grading says "busy" or "not configured"** — set `GEMINI_API_KEY`
+  in `backend/.env` and restart; transient "high demand" 503s retry automatically.
+- **Uploads fail** — set `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (and ensure the
+  `writing-charts` / `speaking-audio` Storage buckets exist).
 
 ---
 
