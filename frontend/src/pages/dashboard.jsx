@@ -17,22 +17,22 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-import { PageHeader, StatCard, bandColor, chartTheme } from "../component/ui";
+import { PageHeader, StatCard, AiBadge, bandColor, chartTheme } from "../component/ui";
 
 const PRACTICE = [
-  { icon: <EditNoteRoundedIcon />, label: "Writing", desc: "Practise Task 1 & 2 essays", path: "/writing", color: "success.main" },
-  { icon: <MicRoundedIcon />, label: "Speaking", desc: "Record answers for feedback", path: "/speaking", color: "warning.main" },
+  { icon: <EditNoteRoundedIcon />, label: "Writing", desc: "AI-graded Task 1 & 2 essays", path: "/writing", color: "success.main", ai: true },
+  { icon: <MicRoundedIcon />, label: "Speaking", desc: "AI feedback on recorded answers", path: "/speaking", color: "warning.main", ai: true },
   { icon: <StyleRoundedIcon />, label: "Flashcards", desc: "Review vocabulary decks", path: "/flashcard", color: "secondary.main" },
 ];
 
 function PracticeCard({ item, onClick }) {
   return (
-    <Card>
+    <Card sx={{ "&:hover": { transform: "translateY(-3px)" } }}>
       <CardActionArea onClick={onClick} sx={{ p: 2.5 }}>
         <Stack direction="row" spacing={2} alignItems="center">
           <Box
             sx={(theme) => ({
-              width: 48, height: 48, borderRadius: 2.5,
+              width: 48, height: 48, borderRadius: 2.5, flexShrink: 0,
               display: "grid", placeItems: "center",
               color: item.color,
               bgcolor: alpha(
@@ -43,8 +43,11 @@ function PracticeCard({ item, onClick }) {
           >
             {item.icon}
           </Box>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography fontWeight={700} noWrap>{item.label}</Typography>
+          <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography fontWeight={700} noWrap>{item.label}</Typography>
+              {item.ai && <AiBadge />}
+            </Stack>
             <Typography variant="body2" color="text.secondary" noWrap>{item.desc}</Typography>
           </Box>
         </Stack>

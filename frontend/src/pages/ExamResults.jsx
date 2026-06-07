@@ -10,20 +10,46 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { alpha } from "@mui/material/styles";
 import { apiFetch } from "../api";
 import { PageHeader, chartTheme } from "../component/ui";
 
-function BandBadge({ band }) {
-  const color =
-    band >= 7 ? "success.main" : band >= 5 ? "warning.main" : "error.main";
+function BandCircle({ band }) {
+  const key = band == null ? "info" : band >= 7 ? "success" : band >= 5 ? "warning" : "error";
   return (
-    <Typography
-      variant="h1"
-      fontWeight={800}
-      sx={{ color, lineHeight: 1, my: 1 }}
+    <Box
+      sx={(theme) => {
+        const c = theme.palette[key].main;
+        return {
+          width: 150,
+          height: 150,
+          borderRadius: "50%",
+          display: "grid",
+          placeItems: "center",
+          mx: "auto",
+          my: 1,
+          color: c,
+          background: `conic-gradient(${c} ${(Math.min(band ?? 0, 9) / 9) * 360}deg, ${alpha(c, 0.14)} 0deg)`,
+          boxShadow: `0 10px 30px ${alpha(c, 0.28)}`,
+        };
+      }}
     >
-      {band ?? "—"}
-    </Typography>
+      <Box
+        sx={(theme) => ({
+          width: 124,
+          height: 124,
+          borderRadius: "50%",
+          display: "grid",
+          placeItems: "center",
+          bgcolor: "background.paper",
+          border: `1px solid ${theme.palette.divider}`,
+        })}
+      >
+        <Typography variant="h2" fontWeight={800} sx={{ lineHeight: 1 }}>
+          {band ?? "—"}
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -68,11 +94,18 @@ export default function ExamResults() {
       />
 
       {/* ── Overall band ── */}
-      <Paper variant="outlined" sx={{ p: 4, mb: 3, textAlign: "center" }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 4, mb: 3, textAlign: "center", borderRadius: 3,
+          background: (t) =>
+            `linear-gradient(180deg, ${alpha(t.palette.primary.main, t.palette.mode === "dark" ? 0.12 : 0.06)} 0%, ${t.palette.background.paper} 60%)`,
+        }}
+      >
         <Typography variant="overline" color="text.secondary" letterSpacing={2}>
           Overall Band Score
         </Typography>
-        <BandBadge band={data.overall_band} />
+        <BandCircle band={data.overall_band} />
         <Typography variant="body2" color="text.secondary">
           {data.status === "graded"
             ? "Test completed and graded"

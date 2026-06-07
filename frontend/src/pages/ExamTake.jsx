@@ -11,6 +11,7 @@ import CloudSyncRoundedIcon from "@mui/icons-material/CloudSyncRounded";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, mediaUrl } from "../api";
 import { SkillChip } from "../component/ui";
+import { TOPBAR_HEIGHT } from "../component/TopBar";
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
@@ -196,7 +197,7 @@ export default function ExamTake() {
       key={q.id}
       ref={(el) => { qRefs.current[q.id] = el; }}
       variant="outlined"
-      sx={{ p: 2, mb: 2, scrollMarginTop: 96 }}
+      sx={{ p: 2, mb: 2, scrollMarginTop: TOPBAR_HEIGHT + 96 }}
     >
       <Typography variant="body2" fontWeight={600} gutterBottom>
         <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>{q.prompt}
@@ -259,7 +260,7 @@ export default function ExamTake() {
           maxHeight: isReading ? 600 : "none",
           overflowY: isReading ? "auto" : "visible",
           position: skill === "listening" ? "sticky" : "static",
-          top: skill === "listening" ? 88 : "auto",
+          top: skill === "listening" ? TOPBAR_HEIGHT + 80 : "auto",
         }}
       >
         <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
@@ -317,7 +318,7 @@ export default function ExamTake() {
         sx={{
           p: 2, mb: 3,
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          position: "sticky", top: 0, zIndex: 10, bgcolor: "background.paper",
+          position: "sticky", top: TOPBAR_HEIGHT, zIndex: 5, bgcolor: "background.paper",
         }}
       >
         <Typography variant="h6" fontWeight={600} noWrap sx={{ maxWidth: "60%" }}>

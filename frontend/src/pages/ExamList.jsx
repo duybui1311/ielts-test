@@ -11,15 +11,15 @@ import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-import { PageHeader, SkillChip } from "../component/ui";
+import { PageHeader, SkillChip, AiBadge, skillHex } from "../component/ui";
 import Writing from "./Writing";
 import Speaking from "./Speaking";
 
 const TABS = [
   { key: "reading", label: "Reading", icon: <MenuBookRoundedIcon /> },
   { key: "listening", label: "Listening", icon: <HeadphonesRoundedIcon /> },
-  { key: "writing", label: "Writing", icon: <EditNoteRoundedIcon /> },
-  { key: "speaking", label: "Speaking", icon: <MicRoundedIcon /> },
+  { key: "writing", label: "Writing", icon: <EditNoteRoundedIcon />, ai: true },
+  { key: "speaking", label: "Speaking", icon: <MicRoundedIcon />, ai: true },
 ];
 
 function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, heading = null }) {
@@ -37,7 +37,15 @@ function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, head
       {heading && <Typography variant="subtitle1" sx={{ mb: 1.5 }}>{heading}</Typography>}
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 2 }}>
       {list.map((exam) => (
-        <Card key={exam.id} sx={{ display: "flex", flexDirection: "column", transition: "transform .15s ease", "&:hover": { transform: "translateY(-3px)" } }}>
+        <Card
+          key={exam.id}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            borderLeft: `4px solid ${skillHex(skill)}`,
+            "&:hover": { transform: "translateY(-4px)", boxShadow: (t) => t.palette.mode === "dark" ? "0 8px 20px rgba(0,0,0,0.55), 0 22px 48px rgba(0,0,0,0.6)" : "0 6px 16px rgba(79,70,229,0.10), 0 18px 40px rgba(16,24,40,0.12)" },
+          }}
+        >
           <CardContent sx={{ flexGrow: 1 }}>
             <Typography variant="h6" fontWeight={700} gutterBottom>{exam.name}</Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
@@ -121,7 +129,22 @@ export default function ExamList() {
         sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
       >
         {TABS.map((t) => (
-          <Tab key={t.key} icon={t.icon} iconPosition="start" label={t.label} sx={{ minHeight: 48 }} />
+          <Tab
+            key={t.key}
+            icon={t.icon}
+            iconPosition="start"
+            label={
+              t.ai ? (
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  <span>{t.label}</span>
+                  <AiBadge />
+                </Stack>
+              ) : (
+                t.label
+              )
+            }
+            sx={{ minHeight: 48 }}
+          />
         ))}
       </Tabs>
 

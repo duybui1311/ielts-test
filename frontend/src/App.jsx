@@ -7,6 +7,8 @@ import Signup from "./pages/signup";
 import Dashboard from "./pages/dashboard";
 import TeacherDashboard from "./pages/teacherDashboard";
 import Navbar from "./component/navbar";
+import TopBar from "./component/TopBar";
+import { FadeIn } from "./component/ui";
 import ProtectedRoute from "./component/ProtectedRoute";
 import CreateNewExam from "./pages/CreateNewExam";
 import FlashcardPage from "./pages/flashcard";
@@ -62,7 +64,10 @@ function PrivateLayout() {
                     p: { xs: 2, md: 3 },
                 })}
             >
-                <Outlet />
+                <TopBar />
+                <FadeIn key={location.pathname}>
+                    <Outlet />
+                </FadeIn>
             </Box>
         </>
     );

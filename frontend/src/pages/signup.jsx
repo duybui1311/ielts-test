@@ -9,7 +9,7 @@ import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import LockRounded from "@mui/icons-material/LockRounded";
 import EmailRounded from "@mui/icons-material/EmailRounded";
 import BadgeRounded from "@mui/icons-material/BadgeRounded";
-import SchoolRounded from "@mui/icons-material/SchoolRounded";
+import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
 import { useNavigate } from "react-router-dom";
 import { setAuthed, landingFor } from "./login";
 
@@ -91,31 +91,65 @@ export default function Signup() {
 			{/* Brand panel (desktop) */}
 			<Box
 				sx={{
+					position: "relative",
+					overflow: "hidden",
 					display: { xs: "none", md: "flex" },
 					flexDirection: "column",
 					justifyContent: "center",
 					gap: 3,
 					p: 8,
 					color: "#fff",
-					background: "linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%)",
+					background: "linear-gradient(150deg, #4338CA 0%, #6D28D9 55%, #9333EA 100%)",
+					"&::after": {
+						content: '""',
+						position: "absolute",
+						bottom: -120, left: -120,
+						width: 360, height: 360,
+						borderRadius: "50%",
+						background: "radial-gradient(circle, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0) 70%)",
+					},
 				}}
 			>
-				<Stack direction="row" spacing={1.5} alignItems="center">
-					<SchoolRounded sx={{ fontSize: 36 }} />
-					<Typography variant="h5" fontWeight={800}>IELTS Platform</Typography>
+				<Stack direction="row" spacing={1.5} alignItems="center" sx={{ position: "relative" }}>
+					<Box
+						sx={{
+							width: 44, height: 44, borderRadius: 2,
+							display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22,
+							bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)",
+						}}
+					>
+						B
+					</Box>
+					<Typography variant="h5" fontWeight={800}>Bandly</Typography>
 				</Stack>
-				<Typography variant="h3" fontWeight={800} sx={{ maxWidth: 460 }}>
+				<Stack direction="row" spacing={1} alignItems="center" sx={{ position: "relative" }}>
+					<AutoAwesomeRounded sx={{ fontSize: 18 }} />
+					<Typography variant="overline" sx={{ opacity: 0.9, letterSpacing: "0.12em" }}>
+						AI-powered IELTS preparation
+					</Typography>
+				</Stack>
+				<Typography variant="h3" fontWeight={800} sx={{ maxWidth: 460, position: "relative" }}>
 					Create your account
 				</Typography>
-				<Typography sx={{ maxWidth: 460, opacity: 0.9 }}>
-					Sign up to take realistic Reading and Listening tests, practise Writing
-					and Speaking, and track your band scores over time.
+				<Typography sx={{ maxWidth: 460, opacity: 0.92, position: "relative" }}>
+					Sign up to take realistic tests across all four skills, get AI feedback on
+					Writing &amp; Speaking, and track your band scores over time.
 				</Typography>
 			</Box>
 
 			{/* Form panel */}
 			<Box sx={{ display: "grid", placeItems: "center", p: 3 }}>
-				<Paper component="form" onSubmit={onSubmit} sx={{ p: 4, width: "100%", maxWidth: 400 }}>
+				<Paper
+					component="form"
+					onSubmit={onSubmit}
+					elevation={0}
+					sx={{
+						p: 4, width: "100%", maxWidth: 400, borderRadius: 3,
+						border: "1px solid", borderColor: "divider",
+						boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px rgba(16,24,40,0.08)",
+						animation: "appFadeInUp .5s cubic-bezier(0.22,1,0.36,1) both",
+					}}
+				>
 					<Stack spacing={2.5}>
 						<Box>
 							<Typography variant="h5" fontWeight={800}>Get started</Typography>

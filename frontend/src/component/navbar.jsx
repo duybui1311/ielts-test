@@ -16,13 +16,14 @@ import HistoryRoundedIcon        from "@mui/icons-material/HistoryRounded";
 import SettingsRoundedIcon       from "@mui/icons-material/SettingsRounded";
 import HelpOutlineRoundedIcon    from "@mui/icons-material/HelpOutlineRounded";
 import LogoutRoundedIcon         from "@mui/icons-material/LogoutRounded";
-import DarkModeRoundedIcon       from "@mui/icons-material/DarkModeRounded";
-import LightModeRoundedIcon      from "@mui/icons-material/LightModeRounded";
 import LibraryBooksRoundedIcon   from "@mui/icons-material/LibraryBooksRounded";
+import AutoAwesomeRoundedIcon    from "@mui/icons-material/AutoAwesomeRounded";
 import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
 
 import { logout } from "../pages/login";
-import { useColorMode } from "../theme/ColorModeContext";
+
+// Placeholder brand wordmark — change `BRAND` to rebrand the whole app.
+const BRAND = "Bandly";
 
 export const NAVBAR_WIDTH_COLLAPSED = 72;
 export const NAVBAR_WIDTH_EXPANDED  = 220;
@@ -67,7 +68,6 @@ export default function Navbar({
 }) {
     const [expanded, setExpanded] = React.useState(false);
     const navigate = useNavigate();
-    const { mode, toggle } = useColorMode();
 
     React.useEffect(() => {
         onWidthChange?.(expanded ? NAVBAR_WIDTH_EXPANDED : NAVBAR_WIDTH_COLLAPSED);
@@ -78,10 +78,6 @@ export default function Navbar({
             const r = (localStorage.getItem("osce-role") || "student").toLowerCase();
             return ["student", "teacher", "admin"].includes(r) ? r : "student";
         } catch { return "student"; }
-    }, []);
-
-    const userName = React.useMemo(() => {
-        try { return localStorage.getItem("osce-name") || ""; } catch { return ""; }
     }, []);
 
     // Pending-review count for the teacher/admin "Review" badge.
@@ -141,22 +137,38 @@ export default function Navbar({
                 flexDirection: "column",
             })}
         >
-            {/* Brand */}
-            <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 2 }}>
+            {/* Brand wordmark */}
+            <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 2, height: 64 }}>
                 <Avatar
                     src={logo}
                     variant="rounded"
                     sx={{
-                        width: 38, height: 38, fontWeight: 800,
-                        background: "linear-gradient(135deg, #6366F1 0%, #06B6D4 100%)",
+                        width: 38, height: 38, fontWeight: 800, fontSize: 20, flexShrink: 0,
+                        background: "linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%)",
+                        boxShadow: "0 6px 16px rgba(79,70,229,0.35)",
                     }}
                 >
-                    {!logo && "I"}
+                    {!logo && BRAND[0]}
                 </Avatar>
                 {expanded && (
-                    <Typography variant="subtitle1" noWrap fontWeight={800}>
-                        {title}
-                    </Typography>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                            variant="subtitle1"
+                            noWrap
+                            sx={{
+                                fontWeight: 800,
+                                lineHeight: 1.1,
+                                background: "linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%)",
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                            }}
+                        >
+                            {BRAND}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ letterSpacing: "0.06em" }}>
+                            IELTS PLATFORM
+                        </Typography>
+                    </Box>
                 )}
             </Stack>
 
@@ -196,34 +208,8 @@ export default function Navbar({
 
             <Divider />
 
-            {/* Theme toggle + user + sign out */}
+            {/* AI tagline + sign out */}
             <List dense sx={{ px: 1, py: 1 }}>
-                <Tooltip
-                    title={expanded ? "" : (mode === "dark" ? "Light mode" : "Dark mode")}
-                    placement="right"
-                    arrow={!expanded}
-                >
-                    <ListItemButton onClick={toggle} sx={(theme) => commonItemSx(theme, false)}>
-                        <ListItemIcon>
-                            {mode === "dark" ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
-                        </ListItemIcon>
-                        {expanded && <ListItemText primary={mode === "dark" ? "Light mode" : "Dark mode"} />}
-                    </ListItemButton>
-                </Tooltip>
-
-                {expanded && userName && (
-                    <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary" noWrap display="block">
-                            Signed in as
-                        </Typography>
-                        <Typography variant="body2" fontWeight={600} noWrap>
-                            {userName}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ textTransform: "capitalize" }}>
-                            {role}
-                        </Typography>
-                    </Box>
-                )}
                 <Tooltip
                     title={expanded ? "" : "Sign out"}
                     placement="right"
@@ -241,6 +227,20 @@ export default function Navbar({
                         {expanded && <ListItemText primary="Sign out" />}
                     </ListItemButton>
                 </Tooltip>
+
+                {expanded && (
+                    <Stack
+                        direction="row"
+                        spacing={0.75}
+                        alignItems="center"
+                        sx={{ px: 1.5, pt: 1.5, pb: 0.5 }}
+                    >
+                        <AutoAwesomeRoundedIcon sx={{ fontSize: 15, color: "secondary.main" }} />
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                            Powered by AI · All 4 Skills
+                        </Typography>
+                    </Stack>
+                )}
             </List>
         </Box>
     );

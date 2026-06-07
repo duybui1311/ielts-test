@@ -7,7 +7,11 @@ import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import LockRounded from "@mui/icons-material/LockRounded";
-import SchoolRounded from "@mui/icons-material/SchoolRounded";
+import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
+import MenuBookRounded from "@mui/icons-material/MenuBookRounded";
+import HeadphonesRounded from "@mui/icons-material/HeadphonesRounded";
+import EditNoteRounded from "@mui/icons-material/EditNoteRounded";
+import MicRounded from "@mui/icons-material/MicRounded";
 import { useNavigate, useLocation } from "react-router-dom";
 
 /* ---------- API base + URL helper ---------- */
@@ -157,32 +161,99 @@ export default function Login() {
 			{/* Brand panel (desktop) */}
 			<Box
 				sx={{
+					position: "relative",
+					overflow: "hidden",
 					display: { xs: "none", md: "flex" },
 					flexDirection: "column",
 					justifyContent: "center",
 					gap: 3,
 					p: 8,
 					color: "#fff",
-					background: "linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%)",
+					background: "linear-gradient(150deg, #4338CA 0%, #6D28D9 55%, #9333EA 100%)",
+					"&::after": {
+						content: '""',
+						position: "absolute",
+						top: -120, right: -120,
+						width: 360, height: 360,
+						borderRadius: "50%",
+						background: "radial-gradient(circle, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0) 70%)",
+					},
 				}}
 			>
-				<Stack direction="row" spacing={1.5} alignItems="center">
-					<SchoolRounded sx={{ fontSize: 36 }} />
-					<Typography variant="h5" fontWeight={800}>IELTS Platform</Typography>
+				<Stack direction="row" spacing={1.5} alignItems="center" sx={{ position: "relative" }}>
+					<Box
+						sx={{
+							width: 44, height: 44, borderRadius: 2,
+							display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22,
+							bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)",
+						}}
+					>
+						B
+					</Box>
+					<Typography variant="h5" fontWeight={800}>Bandly</Typography>
 				</Stack>
-				<Typography variant="h3" fontWeight={800} sx={{ maxWidth: 460 }}>
+				<Stack direction="row" spacing={1} alignItems="center" sx={{ position: "relative" }}>
+					<AutoAwesomeRounded sx={{ fontSize: 18 }} />
+					<Typography variant="overline" sx={{ opacity: 0.9, letterSpacing: "0.12em" }}>
+						AI-powered IELTS preparation
+					</Typography>
+				</Stack>
+				<Typography variant="h3" fontWeight={800} sx={{ maxWidth: 460, position: "relative" }}>
 					Practice. Auto-grade. Improve.
 				</Typography>
-				<Typography sx={{ maxWidth: 460, opacity: 0.9 }}>
-					Take realistic Reading and Listening tests, get instant band scores, and
-					see exactly which question types to work on next.
+				<Typography sx={{ maxWidth: 460, opacity: 0.92, position: "relative" }}>
+					Realistic tests across all four skills, instant band scores, AI feedback
+					on Writing &amp; Speaking, and a clear map of what to work on next.
 				</Typography>
+				<Stack direction="row" spacing={1.25} sx={{ position: "relative", flexWrap: "wrap", gap: 1 }}>
+					{[
+						{ icon: <MenuBookRounded sx={{ fontSize: 18 }} />, label: "Reading" },
+						{ icon: <HeadphonesRounded sx={{ fontSize: 18 }} />, label: "Listening" },
+						{ icon: <EditNoteRounded sx={{ fontSize: 18 }} />, label: "Writing" },
+						{ icon: <MicRounded sx={{ fontSize: 18 }} />, label: "Speaking" },
+					].map((s) => (
+						<Stack
+							key={s.label}
+							direction="row" spacing={0.75} alignItems="center"
+							sx={{ px: 1.5, py: 0.75, borderRadius: 999, bgcolor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)" }}
+						>
+							{s.icon}
+							<Typography variant="body2" fontWeight={600}>{s.label}</Typography>
+						</Stack>
+					))}
+				</Stack>
 			</Box>
 
 			{/* Form panel */}
 			<Box sx={{ display: "grid", placeItems: "center", p: 3 }}>
-				<Paper component="form" onSubmit={onSubmit} sx={{ p: 4, width: "100%", maxWidth: 400 }}>
+				<Paper
+					component="form"
+					onSubmit={onSubmit}
+					elevation={0}
+					sx={{
+						p: 4, width: "100%", maxWidth: 400,
+						borderRadius: 3,
+						border: "1px solid",
+						borderColor: "divider",
+						boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px rgba(16,24,40,0.08)",
+						animation: "appFadeInUp .5s cubic-bezier(0.22,1,0.36,1) both",
+					}}
+				>
 					<Stack spacing={2.5}>
+						<Box sx={{ display: { xs: "block", md: "none" }, mb: 0.5 }}>
+							<Stack direction="row" spacing={1} alignItems="center">
+								<Box
+									sx={{
+										width: 36, height: 36, borderRadius: 1.5, color: "#fff",
+										display: "grid", placeItems: "center", fontWeight: 800,
+										background: "linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%)",
+									}}
+								>
+									B
+								</Box>
+								<Typography variant="h6" fontWeight={800}>Bandly</Typography>
+							</Stack>
+						</Box>
 						<Box>
 							<Typography variant="h5" fontWeight={800}>Welcome back</Typography>
 							<Typography variant="body2" color="text.secondary">
