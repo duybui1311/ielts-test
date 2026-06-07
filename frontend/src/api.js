@@ -25,6 +25,13 @@ export function authHeaders() {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
+/** Resolve a media URL: absolute (e.g. Supabase Storage) URLs are returned as-is;
+ *  relative paths are prefixed with the API base. */
+export function mediaUrl(url) {
+  if (!url) return "";
+  return /^https?:\/\//i.test(url) ? url : `${API_BASE}${url}`;
+}
+
 function clearAuthAndRedirect() {
   try {
     ["osce-auth", "osce-token", "osce-user-id", "osce-name", "osce-email", "osce-role"]

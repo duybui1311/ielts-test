@@ -4,7 +4,7 @@ import {
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import { useParams, useNavigate } from "react-router-dom";
-import { apiFetch, API_BASE } from "../api";
+import { apiFetch, mediaUrl } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
 import CommentedDoc from "../component/CommentedDoc";
 import AiGrade from "../component/AiGrade";
@@ -71,7 +71,7 @@ export default function ResultView() {
           <CommentedDoc text={sub.response_text || ""} comments={sub.comments || []} />
         ) : (
           <Card sx={{ p: 3 }}>
-            {sub.audio_url && <Box component="audio" controls src={`${API_BASE}${sub.audio_url}`} sx={{ width: "100%", mb: 2 }} />}
+            {sub.audio_url && <Box component="audio" controls src={mediaUrl(sub.audio_url)} sx={{ width: "100%", mb: 2 }} />}
             <Typography sx={{ whiteSpace: "pre-wrap" }} color={sub.transcript ? "text.primary" : "text.disabled"}>
               {sub.transcript || "(no transcript)"}
             </Typography>

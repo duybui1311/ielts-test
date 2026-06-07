@@ -7,7 +7,7 @@ import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
-import { apiFetch, API_BASE } from "../api";
+import { apiFetch, mediaUrl } from "../api";
 import { PageHeader } from "../component/ui";
 import CommentedDoc from "../component/CommentedDoc";
 import AiGrade from "../component/AiGrade";
@@ -253,7 +253,7 @@ function GradePanel({ item, onGraded }) {
       ) : (
         <>
           {item.audio_url && (
-            <Box component="audio" controls src={`${API_BASE}${item.audio_url}`} sx={{ width: "100%", mb: 2 }} />
+            <Box component="audio" controls src={mediaUrl(item.audio_url)} sx={{ width: "100%", mb: 2 }} />
           )}
           <Typography variant="subtitle2" color="text.secondary">Transcript</Typography>
           <Card variant="outlined" sx={{ p: 2, mt: 1, mb: 2, boxShadow: "none", maxHeight: 280, overflow: "auto" }}>
