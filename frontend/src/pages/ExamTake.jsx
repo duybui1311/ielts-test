@@ -9,7 +9,7 @@ import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CloudDoneRoundedIcon from "@mui/icons-material/CloudDoneRounded";
 import CloudSyncRoundedIcon from "@mui/icons-material/CloudSyncRounded";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
-import { apiFetch, API_BASE } from "../api";
+import { apiFetch, mediaUrl } from "../api";
 import { SkillChip } from "../component/ui";
 
 function fmt(secs) {
@@ -19,7 +19,7 @@ function fmt(secs) {
 }
 
 /** Resolve a media URL: Supabase uploads are absolute; legacy paths are relative. */
-const mediaSrc = (url) => (!url ? "" : /^https?:\/\//.test(url) ? url : `${API_BASE}${url}`);
+const mediaSrc = mediaUrl;
 
 const REF_LABEL = {
   reading: "PASSAGE",

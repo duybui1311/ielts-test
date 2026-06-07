@@ -11,8 +11,17 @@ browser). The supabase client is imported lazily so the app still boots before
 `pip install -r backend/requirements.txt`.
 """
 import os
+import re
 import uuid
 from functools import lru_cache
+
+
+def _normalize_public_url(url: str) -> str:
+    """Repair public URLs returned by some supabase-py versions: a scheme with a
+    missing colon ("https//host/..." -> "https://host/...") and a stray trailing
+    "?". A malformed scheme makes the browser treat the URL as a relative path."""
+    url = re.sub(r"^(https?)//", r"\1://", url.strip())
+    return url.rstrip("?")
 
 
 class StorageNotConfigured(RuntimeError):
@@ -54,4 +63,4 @@ def upload_bytes(
     client.storage.from_(bucket).upload(
         name, data, {"content-type": content_type, "upsert": "true"},
     )
-    return client.storage.from_(bucket).get_public_url(name)
+    return _normalize_public_url(client.storage.from_(bucket).get_public_url(name))

@@ -26,10 +26,13 @@ export function authHeaders() {
 }
 
 /** Resolve a media URL: absolute (e.g. Supabase Storage) URLs are returned as-is;
- *  relative paths are prefixed with the API base. */
+ *  relative paths are prefixed with the API base. Also repairs a malformed scheme
+ *  ("https//host" -> "https://host") that some supabase-py versions produce —
+ *  without the colon the browser treats it as a relative path. */
 export function mediaUrl(url) {
   if (!url) return "";
-  return /^https?:\/\//i.test(url) ? url : `${API_BASE}${url}`;
+  const u = url.replace(/^(https?)\/\//i, "$1://");
+  return /^https?:\/\//i.test(u) ? u : `${API_BASE}${u}`;
 }
 
 function clearAuthAndRedirect() {
