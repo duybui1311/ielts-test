@@ -11,7 +11,7 @@ import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import TipsAndUpdatesRoundedIcon from "@mui/icons-material/TipsAndUpdatesRounded";
 import { useNavigate, useLocation } from "react-router-dom";
-import { apiFetch, getUserId, API_BASE, authHeaders } from "../api";
+import { apiFetch, getUserId, API_BASE, authHeaders, mediaUrl } from "../api";
 import { PageHeader, SkillChip } from "../component/ui";
 
 /** Map the AI importer's TestIn-shaped JSON into the builder's section state. */
@@ -468,7 +468,7 @@ export default function CreateNewExam() {
                         onChange={(e) => uploadMedia(si, "audio", e.target.files?.[0])} />
                     </Button>
                   </Stack>
-                  {sec.audio_url && <Box component="audio" controls src={sec.audio_url} sx={{ width: "100%", mt: 1 }} />}
+                  {sec.audio_url && <Box component="audio" controls src={mediaUrl(sec.audio_url)} sx={{ width: "100%", mt: 1 }} />}
                 </Box>
               )}
 
@@ -486,7 +486,7 @@ export default function CreateNewExam() {
                     )}
                   </Stack>
                   {sec.image_url && (
-                    <Box component="img" src={sec.image_url} alt="Task 1 chart"
+                    <Box component="img" src={mediaUrl(sec.image_url)} alt="Task 1 chart"
                       sx={{ display: "block", mt: 1, maxWidth: "100%", maxHeight: 240, borderRadius: 1, border: "1px solid", borderColor: "divider" }} />
                   )}
                 </Box>

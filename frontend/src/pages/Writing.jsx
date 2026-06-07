@@ -8,7 +8,7 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, API_BASE, authHeaders } from "../api";
+import { apiFetch, API_BASE, authHeaders, mediaUrl } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
 
 function isTeacher() {
@@ -302,7 +302,7 @@ function Editor({ task, onDone }) {
           <Typography variant="subtitle1">Prompt</Typography>
         </Stack>
         {task.image_url && (
-          <Box component="img" src={task.image_url} alt="Task chart" sx={{ mb: 2, maxWidth: "100%", borderRadius: 2 }} />
+          <Box component="img" src={mediaUrl(task.image_url)} alt="Task chart" sx={{ mb: 2, maxWidth: "100%", borderRadius: 2 }} />
         )}
         <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>{task.prompt_md}</Typography>
       </Card>

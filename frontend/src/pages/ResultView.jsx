@@ -55,7 +55,7 @@ export default function ResultView() {
         <Card sx={{ p: 3, mb: 2 }}>
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>Task</Typography>
           {sub.image_url && (
-            <Box component="img" src={sub.image_url} alt="Task chart"
+            <Box component="img" src={mediaUrl(sub.image_url)} alt="Task chart"
               sx={{ display: "block", maxWidth: "100%", borderRadius: 1, mb: 2, border: "1px solid", borderColor: "divider" }} />
           )}
           <Typography sx={{ whiteSpace: "pre-wrap" }}>{sub.task_prompt}</Typography>

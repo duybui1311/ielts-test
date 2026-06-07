@@ -9,6 +9,6 @@ python-multipart
 pyjwt
 anthropic
 google-genai
-supabase
+supabase==2.5.0
 pypdf
 python-docx
