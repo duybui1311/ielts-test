@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import get_current_user, require_role
+from backend.service.review_sched import apply_result
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -148,6 +149,97 @@ def pending_count(
         .filter(models.SpeakingSubmission.status.in_(pending)).count()
     )
     return {"pending": n}
+
+
+# ── Student spaced-review queue ─────────────────────────────────────────────
+
+def _due_item(db: Session, rq: models.ReviewQueue) -> Optional[dict]:
+    q = db.query(models.Question).filter(models.Question.id == rq.question_id).first()
+    if not q:
+        return None
+    station = q.station
+    return {
+        "id": rq.id,                       # review_queue id
+        "question_id": q.id,
+        "qtype": q.qtype.value,
+        "prompt": q.prompt,
+        "options": q.options_json or [] if q.qtype.value == "mcq" else [],
+        "correct_index": q.correct_index,
+        "accept_answers": q.accept_answers or [],
+        "sub_skill": q.sub_skill,
+        "skill": station.skill if station else None,
+        "passage_md": station.case.body_md if station and station.case else "",
+        "audio_url": station.audio_url if station else None,
+        "image_url": station.image_url if station else None,
+        "explanation": q.explanation,
+        "support_sentences": q.support_sentences or [],
+        "due_date": rq.due_date.isoformat() if rq.due_date else None,
+        "interval_days": rq.interval_days,
+    }
+
+
+@router.get("/due")
+def review_due(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Questions whose review is due today (or overdue) for the current user."""
+    now = datetime.utcnow()
+    rows = (
+        db.query(models.ReviewQueue)
+        .filter(
+            models.ReviewQueue.user_id == user.id,
+            models.ReviewQueue.due_date <= now,
+        )
+        .order_by(models.ReviewQueue.due_date.asc())
+        .all()
+    )
+    return [item for rq in rows if (item := _due_item(db, rq)) is not None]
+
+
+@router.get("/due_count")
+def review_due_count(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    now = datetime.utcnow()
+    n = (
+        db.query(models.ReviewQueue)
+        .filter(
+            models.ReviewQueue.user_id == user.id,
+            models.ReviewQueue.due_date <= now,
+        )
+        .count()
+    )
+    return {"due": n}
+
+
+class ReviewResultIn(BaseModel):
+    correct: bool
+
+
+@router.post("/{queue_id}/result")
+def review_result(
+    queue_id: int,
+    payload: ReviewResultIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Record a spaced-review answer and reschedule the item."""
+    rq = (
+        db.query(models.ReviewQueue)
+        .filter(models.ReviewQueue.id == queue_id, models.ReviewQueue.user_id == user.id)
+        .first()
+    )
+    if not rq:
+        raise HTTPException(404, "Review item not found")
+    apply_result(db, rq, payload.correct)
+    db.commit()
+    return {
+        "ok": True,
+        "interval_days": rq.interval_days,
+        "next_due": rq.due_date.isoformat() if rq.due_date else None,
+    }
 
 
 # ── Inline comments on writing responses ────────────────────────────────────

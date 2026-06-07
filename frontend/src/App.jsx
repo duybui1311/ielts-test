@@ -24,7 +24,16 @@ import Help from "./pages/Help";
 import Writing from "./pages/Writing";
 import Speaking from "./pages/Speaking";
 import Review from "./pages/Review";
+import ReviewQueue from "./pages/ReviewQueue";
+import Practice from "./pages/Practice";
 import ResultView from "./pages/ResultView";
+import { getRole } from "./pages/login";
+
+// /review is the teacher grading queue for teachers/admins, and the student's
+// spaced-repetition review for students.
+function ReviewRoute() {
+    return getRole() === "student" ? <ReviewQueue /> : <Review />;
+}
 
 function PrivateLayout() {
     const [navWidth, setNavWidth] = React.useState(72);
@@ -43,6 +52,7 @@ function PrivateLayout() {
         if (p.startsWith("/create-exam"))       return "create";
         if (p.startsWith("/writing"))           return "writing";
         if (p.startsWith("/speaking"))          return "speaking";
+        if (p.startsWith("/practice"))          return "practice";
         if (p.startsWith("/review"))            return "review";
         if (p.startsWith("/flashcard"))         return "flashcard";
         if (p.startsWith("/history"))           return "history";
@@ -102,8 +112,10 @@ export default function App() {
                         <Route path="/create-exam"         element={<CreateNewExam />} />
                         <Route path="/writing"             element={<Writing />} />
                         <Route path="/speaking"            element={<Speaking />} />
+                        <Route path="/practice"            element={<Practice />} />
+                        <Route path="/practice/:subSkill"  element={<Practice />} />
                         <Route path="/result/:kind/:submissionId" element={<ResultView />} />
-                        <Route path="/review"              element={<Review />} />
+                        <Route path="/review"              element={<ReviewRoute />} />
                         <Route path="/flashcard"           element={<FlashcardPage />} />
                         <Route path="/history"             element={<History />} />
                         <Route path="/settings"            element={<Settings />} />

@@ -14,12 +14,14 @@ import {
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
 import { PageHeader, StatCard, bandColor, chartTheme } from "../component/ui";
+import Heatmap from "../component/Heatmap";
 
 const EMPTY = {
   kpis: { classes: 0, students: 0, exams: 0, to_review: 0 },
   classes: [],
   band_trend: [],
   recent_submissions: [],
+  heatmap: [],
 };
 
 export default function TeacherDashboard() {
@@ -40,7 +42,7 @@ export default function TeacherDashboard() {
     return <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}><CircularProgress /></Box>;
   }
 
-  const { kpis, classes, band_trend, recent_submissions } = data;
+  const { kpis, classes, band_trend, recent_submissions, heatmap } = data;
   const primary = theme.palette.primary.main;
   const ct = chartTheme(theme);
   const hasClasses = classes.length > 0;
@@ -78,6 +80,27 @@ export default function TeacherDashboard() {
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1fr) 340px" }, gap: 2 }}>
           {/* Left column */}
           <Stack spacing={2}>
+            {(heatmap || []).some((h) => h.attempted > 0) && (
+              <Card sx={{ p: 3 }}>
+                <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                  Class weakness heatmap
+                </Typography>
+                <Heatmap data={heatmap} />
+                <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap" }}>
+                  {[
+                    ["success.main", "≥85%"],
+                    ["warning.main", "60–84%"],
+                    ["error.main", "<60%"],
+                    ["text.disabled", "No data"],
+                  ].map(([color, label]) => (
+                    <Stack key={label} direction="row" spacing={0.75} alignItems="center">
+                      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color }} />
+                      <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Card>
+            )}
             {band_trend.length > 0 && (
               <Card sx={{ p: 3 }}>
                 <Typography variant="subtitle1" sx={{ mb: 2 }}>Class average band over time</Typography>

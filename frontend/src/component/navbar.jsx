@@ -17,6 +17,8 @@ import SettingsRoundedIcon       from "@mui/icons-material/SettingsRounded";
 import HelpOutlineRoundedIcon    from "@mui/icons-material/HelpOutlineRounded";
 import LogoutRoundedIcon         from "@mui/icons-material/LogoutRounded";
 import LibraryBooksRoundedIcon   from "@mui/icons-material/LibraryBooksRounded";
+import FitnessCenterRoundedIcon  from "@mui/icons-material/FitnessCenterRounded";
+import ReplayRoundedIcon         from "@mui/icons-material/ReplayRounded";
 import AutoAwesomeRoundedIcon    from "@mui/icons-material/AutoAwesomeRounded";
 import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
 
@@ -29,12 +31,14 @@ export const NAVBAR_WIDTH_COLLAPSED = 72;
 export const NAVBAR_WIDTH_EXPANDED  = 220;
 
 const STUDENT_ITEMS = [
-    { key: "exams",     label: "My Tests",   icon: <SchoolRoundedIcon />,      path: "/exams" },
-    { key: "dashboard", label: "Dashboard",  icon: <DashboardRoundedIcon />,   path: "/dashboard" },
-    { key: "flashcard", label: "Flashcards", icon: <StyleRoundedIcon />,       path: "/flashcard" },
-    { key: "history",   label: "History",    icon: <HistoryRoundedIcon />,     path: "/history" },
-    { key: "settings",  label: "Settings",   icon: <SettingsRoundedIcon />,    path: "/settings" },
-    { key: "help",      label: "Help",       icon: <HelpOutlineRoundedIcon />, path: "/help" },
+    { key: "exams",     label: "My Tests",        icon: <SchoolRoundedIcon />,        path: "/exams" },
+    { key: "dashboard", label: "Dashboard",       icon: <DashboardRoundedIcon />,     path: "/dashboard" },
+    { key: "practice",  label: "Practice by Type", icon: <FitnessCenterRoundedIcon />, path: "/practice", ai: true },
+    { key: "review",    label: "Review",          icon: <ReplayRoundedIcon />,        path: "/review" },
+    { key: "flashcard", label: "Flashcards",      icon: <StyleRoundedIcon />,         path: "/flashcard" },
+    { key: "history",   label: "History",         icon: <HistoryRoundedIcon />,       path: "/history" },
+    { key: "settings",  label: "Settings",        icon: <SettingsRoundedIcon />,      path: "/settings" },
+    { key: "help",      label: "Help",            icon: <HelpOutlineRoundedIcon />,   path: "/help" },
 ];
 
 const TEACHER_ITEMS = [
@@ -80,13 +84,16 @@ export default function Navbar({
         } catch { return "student"; }
     }, []);
 
-    // Pending-review count for the teacher/admin "Review" badge.
+    // "Review" badge: teachers/admins see the pending grading count; students
+    // see how many spaced-review questions are due today.
     const [reviewCount, setReviewCount] = React.useState(0);
     React.useEffect(() => {
-        if (role !== "teacher" && role !== "admin") return;
-        apiFetch("/api/review/count")
+        const isTeacher = role === "teacher" || role === "admin";
+        const url = isTeacher ? "/api/review/count" : "/api/review/due_count";
+        const key = isTeacher ? "pending" : "due";
+        apiFetch(url)
             .then((r) => (r.ok ? r.json() : null))
-            .then((d) => { if (d) setReviewCount(d.pending || 0); })
+            .then((d) => { if (d) setReviewCount(d[key] || 0); })
             .catch(() => {});
     }, [role]);
 
@@ -199,6 +206,9 @@ export default function Navbar({
                                         primary={it.label}
                                         slotProps={{ primary: { noWrap: true, fontWeight: selected ? 600 : 500 } }}
                                     />
+                                )}
+                                {expanded && it.ai && (
+                                    <AutoAwesomeRoundedIcon sx={{ fontSize: 15, color: "secondary.main", ml: 0.5 }} />
                                 )}
                             </ListItemButton>
                         </Tooltip>

@@ -323,12 +323,15 @@ def get_results(
                 "student_answer": student_answer,
                 "correct_answer": correct_answer,
                 "is_auto_correct": ans.is_auto_correct if ans else None,
+                "explanation": q.explanation,
+                "support_sentences": q.support_sentences or [],
             })
 
         sections.append({
             "station_id": sa.station_id,
             "skill": station.skill,
             "title": station.case.title,
+            "passage_md": station.case.body_md,
             "raw_score": sa.raw_score,
             "band": sa.band,
             "questions": questions_out,

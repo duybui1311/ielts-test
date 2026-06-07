@@ -12,12 +12,13 @@ import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import MicRoundedIcon from "@mui/icons-material/MicRounded";
 import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
 import { PageHeader, StatCard, AiBadge, bandColor, chartTheme } from "../component/ui";
+import Heatmap from "../component/Heatmap";
 
 const PRACTICE = [
   { icon: <EditNoteRoundedIcon />, label: "Writing", desc: "AI-graded Task 1 & 2 essays", path: "/writing", color: "success.main", ai: true },
@@ -68,6 +69,7 @@ const EMPTY = {
   band_trend: [],
   recent: [],
   weakness: [],
+  heatmap: [],
   productive: [],
 };
 
@@ -97,7 +99,7 @@ export default function Dashboard() {
     );
   }
 
-  const { kpis, band_trend, recent, weakness, productive } = data;
+  const { kpis, band_trend, recent, heatmap, productive } = data;
   const reviewed = (productive || []).filter((p) => p.band != null);
   const hasData = kpis.tests_taken > 0 || reviewed.length > 0;
   const primary = theme.palette.primary.main;
@@ -203,23 +205,26 @@ export default function Dashboard() {
             </Box>
           </Card>
 
-          {/* Weakness */}
+          {/* Weakness heatmap */}
           <Card sx={{ p: 3 }}>
-            <Typography variant="subtitle1" sx={{ mb: 2 }}>Mistake patterns</Typography>
-            {weakness.length === 0 ? (
-              <Typography color="text.secondary" variant="body2">No mistakes recorded — great work!</Typography>
-            ) : (
-              <Box sx={{ height: 260 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={weakness} layout="vertical" margin={{ left: 16, right: 16, top: 4, bottom: 4 }}>
-                    <XAxis type="number" allowDecimals={false} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} />
-                    <YAxis type="category" dataKey="name" width={130} tick={ct.tick} axisLine={ct.axisLine} tickLine={ct.tickLine} tickFormatter={(v) => v.replace(/_/g, " ")} />
-                    <Tooltip {...ct.tooltip} formatter={(v) => [v, "mistakes"]} cursor={{ fill: ct.grid.stroke }} />
-                    <Bar dataKey="misses" fill={theme.palette.warning.main} radius={[0, 6, 6, 0]} barSize={18} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-            )}
+            <Stack direction="row" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>Weakness heatmap</Typography>
+              <Typography variant="caption" color="text.secondary">Tap a type to drill it</Typography>
+            </Stack>
+            <Heatmap data={heatmap} onCellClick={(sk) => navigate(`/practice/${sk}`)} />
+            <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap" }}>
+              {[
+                ["success.main", "≥85%"],
+                ["warning.main", "60–84%"],
+                ["error.main", "<60%"],
+                ["text.disabled", "No data"],
+              ].map(([color, label]) => (
+                <Stack key={label} direction="row" spacing={0.75} alignItems="center">
+                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color }} />
+                  <Typography variant="caption" color="text.secondary">{label}</Typography>
+                </Stack>
+              ))}
+            </Stack>
           </Card>
 
           {/* Recent attempts */}

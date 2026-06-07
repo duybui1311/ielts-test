@@ -9,6 +9,7 @@ from backend.service.models import (
     ExamAttempt,
     AttemptStatus,
 )
+from backend.service.review_sched import enqueue_wrong
 
 # Approximate raw(/40) -> band. EDITABLE — official tables vary per test.
 LISTENING = [(39, 9.0), (37, 8.5), (35, 8.0), (32, 7.5), (30, 7.0), (26, 6.5),
@@ -71,6 +72,8 @@ def autograde_station_attempt(db: Session, station_attempt_id: int):
                 question_type=q.qtype.value,
                 sub_skill=q.sub_skill,
             ))
+            # Spaced review: resurface this missed question later.
+            enqueue_wrong(db, sa.exam_attempt.user_id, q.id)
 
     sa.raw_score = float(correct)
     if station and station.skill in ("listening", "reading"):

@@ -31,18 +31,11 @@ from sqlalchemy.orm import Session
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import require_role
+from backend.service.subskills import SUB_SKILLS
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
 MODEL = "claude-sonnet-4-6"
-
-# Closed sub_skill vocab — must mirror the frontend builder's SUB_SKILLS so the
-# imported test loads cleanly and analytics (which group by sub_skill) stay
-# consistent. Keep this list and frontend/src/pages/CreateNewExam.jsx in sync.
-SUB_SKILLS = [
-    "multiple_choice", "gap_fill", "true_false_notgiven",
-    "matching_headings", "sentence_completion", "short_answer",
-]
 
 # Tool schema the model must fill — mirrors tests_io.TestIn so the result can be
 # saved directly through POST /api/tests/import after teacher review.
@@ -74,6 +67,8 @@ TEST_TOOL = {
                                     "correct_index": {"type": "integer", "description": "0-based index of the correct MCQ option"},
                                     "accept_answers": {"type": "array", "items": {"type": "string"}, "description": "Accepted answers for short questions"},
                                     "sub_skill": {"type": "string", "enum": SUB_SKILLS, "description": "Question category from the fixed list"},
+                                    "explanation": {"type": "string", "description": "For reading/listening questions: 2-3 plain-language sentences on why the correct answer is correct, briefly noting why a common wrong choice is a trap."},
+                                    "support_sentences": {"type": "array", "items": {"type": "string"}, "description": "For reading/listening questions: the exact sentence(s) copied verbatim from passage_md that justify the answer."},
                                 },
                                 "required": ["qtype", "prompt"],
                             },
@@ -121,7 +116,11 @@ SYSTEM = (
     "question: task instructions and word limits, lists of headings, word banks / boxes of "
     "options, example answers, and the text of any notes/table/flow-chart/summary-completion "
     "templates and diagram labels. Reproduce tables as markdown tables and keep gaps as "
-    "blanks like '________ (3)'. Never omit a heading list, option box, or instruction line."
+    "blanks like '________ (3)'. Never omit a heading list, option box, or instruction line.\n"
+    "10. For every reading and listening question, also fill `explanation` (2-3 plain "
+    "sentences on why the correct answer is correct, noting why a common wrong choice is a "
+    "trap) and `support_sentences` (the exact sentence(s) copied verbatim from passage_md "
+    "that justify the answer). Leave both empty for writing/speaking questions."
 )
 
 
@@ -198,8 +197,19 @@ def _finalize(result: dict) -> dict:
             # Keep sub_skill within the closed analytics vocab.
             if qtype == "explain":
                 q.pop("sub_skill", None)
-            elif q.get("sub_skill") not in SUB_SKILLS:
-                q["sub_skill"] = "multiple_choice" if qtype == "mcq" else "short_answer"
+                q.pop("explanation", None)
+                q.pop("support_sentences", None)
+            else:
+                if q.get("sub_skill") not in SUB_SKILLS:
+                    q["sub_skill"] = "multiple_choice" if qtype == "mcq" else "short_answer"
+                # Normalise the learning-feature fields.
+                exp = q.get("explanation")
+                q["explanation"] = exp.strip() if isinstance(exp, str) and exp.strip() else None
+                supp = q.get("support_sentences")
+                q["support_sentences"] = (
+                    [str(s).strip() for s in supp if str(s).strip()]
+                    if isinstance(supp, list) else None
+                )
     return result
 
 

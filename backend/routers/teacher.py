@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import require_role
+from backend.service.subskills import heatmap as subskill_heatmap
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"])
 
@@ -47,12 +48,19 @@ def teacher_dashboard(
         "classes": [],
         "band_trend": [],
         "recent_submissions": [],
+        "heatmap": [],
     }
     classes = db.query(models.Class).filter(models.Class.owner_id == uid).all()
     if not classes:
         return empty
 
     class_ids = [c.id for c in classes]
+    student_ids = [
+        e.user_id
+        for e in db.query(models.ClassEnrolment)
+        .filter(models.ClassEnrolment.class_id.in_(class_ids))
+        .all()
+    ]
     exams = db.query(models.Exam).filter(models.Exam.class_id.in_(class_ids)).all()
     exam_ids = [e.id for e in exams]
 
@@ -140,4 +148,5 @@ def teacher_dashboard(
         "classes": classes_out,
         "band_trend": band_trend,
         "recent_submissions": recent_submissions,
+        "heatmap": subskill_heatmap(db, student_ids),
     }

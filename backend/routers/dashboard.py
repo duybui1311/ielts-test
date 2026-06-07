@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import get_current_user
+from backend.service.subskills import heatmap as subskill_heatmap
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -135,5 +136,6 @@ def student_dashboard(
         "band_trend": trend,
         "recent": recent,
         "weakness": weakness,
+        "heatmap": subskill_heatmap(db, [uid]),
         "productive": productive,
     }

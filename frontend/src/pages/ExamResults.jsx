@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Paper, Stack, Chip, Alert,
-  CircularProgress, Divider, Button, useTheme,
+  CircularProgress, Divider, Button, Collapse, useTheme,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
+import MenuBookRoundedIcon from "@mui/icons-material/MenuBookRounded";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -13,6 +14,37 @@ import {
 import { alpha } from "@mui/material/styles";
 import { apiFetch } from "../api";
 import { PageHeader, chartTheme } from "../component/ui";
+import ExplanationPanel from "../component/ExplanationPanel";
+import HighlightedText from "../component/HighlightedText";
+
+/** Collapsible passage/transcript with the section's support sentences highlighted. */
+function SectionPassage({ passage, sentences }) {
+  const [open, setOpen] = useState(false);
+  if (!passage || !passage.trim()) return null;
+  return (
+    <Box sx={{ px: 2, pt: 1.5 }}>
+      <Button
+        size="small"
+        variant="text"
+        onClick={() => setOpen((o) => !o)}
+        startIcon={<MenuBookRoundedIcon />}
+        sx={{ fontWeight: 700 }}
+      >
+        {open ? "Hide passage" : "Show passage"}
+      </Button>
+      <Collapse in={open} unmountOnExit>
+        <Box
+          sx={(t) => ({
+            mt: 1, p: 2, borderRadius: 2, maxHeight: 360, overflowY: "auto",
+            border: `1px solid ${t.palette.divider}`, bgcolor: "background.default",
+          })}
+        >
+          <HighlightedText text={passage} sentences={sentences} />
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
 
 function BandCircle({ band }) {
   const key = band == null ? "info" : band >= 7 ? "success" : band >= 5 ? "warning" : "error";
@@ -159,6 +191,11 @@ export default function ExamResults() {
           </Box>
           <Divider />
 
+          <SectionPassage
+            passage={sec.passage_md}
+            sentences={(sec.questions || []).flatMap((q) => q.support_sentences || [])}
+          />
+
           {/* Per-question rows */}
           <Box sx={{ p: 2 }}>
             {(sec.questions || []).map((q, qi) => (
@@ -212,6 +249,13 @@ export default function ExamResults() {
                     >
                       Correct answer: <strong>{q.correct_answer}</strong>
                     </Typography>
+                  )}
+                  {q.qtype !== "explain" && (
+                    <ExplanationPanel
+                      questionId={q.id}
+                      explanation={q.explanation}
+                      supportSentences={q.support_sentences}
+                    />
                   )}
                 </Box>
 

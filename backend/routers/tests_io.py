@@ -61,6 +61,8 @@ class QuestionIn(BaseModel):
     accept_answers: Optional[List[str]] = None  # for short
     sub_skill: Optional[str] = None
     display_order: int = 1
+    explanation: Optional[str] = None           # learning-feature: why the answer is correct
+    support_sentences: Optional[List[str]] = None  # passage sentence(s) supporting it
 
 
 class SectionIn(BaseModel):
@@ -139,6 +141,8 @@ def import_test(
                 accept_answers=q.accept_answers,
                 sub_skill=q.sub_skill,
                 display_order=q.display_order,
+                explanation=q.explanation,
+                support_sentences=q.support_sentences,
             ))
     db.commit()
     return {"exam_id": exam.id, "sections": len(payload.sections)}
@@ -232,6 +236,8 @@ def _replace_sections(db: Session, exam: models.Exam, sections: List[SectionIn])
                 accept_answers=q.accept_answers,
                 sub_skill=q.sub_skill,
                 display_order=q.display_order,
+                explanation=q.explanation,
+                support_sentences=q.support_sentences,
             ))
     exam.total_stations = len(sections)
 
@@ -332,6 +338,8 @@ def export_test(
                 "correct_index": q.correct_index,
                 "accept_answers": q.accept_answers,
                 "sub_skill": q.sub_skill,
+                "explanation": q.explanation,
+                "support_sentences": q.support_sentences,
             } for q in st.questions],
         })
     return out

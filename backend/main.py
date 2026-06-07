@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from .service.config import settings
 from .service.database import Base, engine
 from .service import models  # noqa: F401  (registers tables)
@@ -11,14 +12,30 @@ from .routers import (
     auth, tests_io, autograde, analytics, student_flow,
     dashboard, me, flashcards, teacher,
     writing, speaking, review, ai_import, admin,
+    questions, practice,
 )
 
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 
 
+# Columns added to existing tables after the original schema. `create_all` only
+# creates missing tables, never alters existing ones, so we add them idempotently
+# here (Postgres supports ADD COLUMN IF NOT EXISTS).
+_COLUMN_MIGRATIONS = [
+    "ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT",
+    "ALTER TABLE questions ADD COLUMN IF NOT EXISTS support_sentences JSON",
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        for stmt in _COLUMN_MIGRATIONS:
+            try:
+                conn.execute(text(stmt))
+            except Exception:  # noqa: BLE001 — non-Postgres or already applied
+                pass
     yield
 
 
@@ -52,6 +69,8 @@ def create_app() -> FastAPI:
     app.include_router(review.router)
     app.include_router(ai_import.router)
     app.include_router(admin.router)
+    app.include_router(questions.router)
+    app.include_router(practice.router)
 
     # Serve uploaded speaking audio.
     os.makedirs(UPLOAD_DIR, exist_ok=True)
