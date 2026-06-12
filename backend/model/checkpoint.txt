@@ -1,1 +1,0 @@
-The model is too big therefore I cannot upload it into git, you can search for Llima 3 -8B in hugging face for the same outcome
