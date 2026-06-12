@@ -9,7 +9,7 @@ teacher and student, a class, one IELTS exam (reading + listening), a couple of
 flashcard decks, and one fully graded student attempt (so the dashboard,
 analytics and history have real numbers).
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 
@@ -162,7 +162,7 @@ def _attempt(db, *, exam, student_id):
     ea = models.ExamAttempt(
         exam_id=exam.id, user_id=student_id,
         status=models.AttemptStatus.draft,
-        started_at=datetime.utcnow() - timedelta(days=2),
+        started_at=datetime.now(timezone.utc) - timedelta(days=2),
     )
     db.add(ea)
     db.flush()
@@ -190,7 +190,7 @@ def _attempt(db, *, exam, student_id):
                 db.add(models.Answer(station_attempt_id=sa.id, question_id=q.id, value_text=val))
 
     ea.status = models.AttemptStatus.submitted
-    ea.submitted_at = datetime.utcnow() - timedelta(days=2)
+    ea.submitted_at = datetime.now(timezone.utc) - timedelta(days=2)
     for sa in ea.station_attempts:
         sa.status = models.AttemptStatus.submitted
         sa.submitted_at = ea.submitted_at

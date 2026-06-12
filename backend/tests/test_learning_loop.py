@@ -2,7 +2,7 @@
 - backend.service.review_sched — spaced-repetition scheduling.
 - backend.service.subskills   — per-sub-skill accuracy aggregation / heatmap.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from backend.service import models
 from backend.service.review_sched import enqueue_wrong, apply_result, MAX_INTERVAL_DAYS
@@ -30,7 +30,7 @@ def test_enqueue_wrong_schedules_one_day_out(db_session):
     assert len(rows) == 1
     rq = rows[0]
     assert rq.interval_days == 1
-    assert rq.due_date.date() == (datetime.utcnow() + timedelta(days=1)).date()
+    assert rq.due_date.date() == (datetime.now(timezone.utc) + timedelta(days=1)).date()
 
 
 def test_enqueue_wrong_is_idempotent(db_session):
@@ -56,7 +56,7 @@ def test_apply_result_correct_doubles_interval_and_logs(db_session):
     db_session.flush()
 
     assert rq.interval_days == 2
-    assert rq.due_date.date() == (datetime.utcnow() + timedelta(days=2)).date()
+    assert rq.due_date.date() == (datetime.now(timezone.utc) + timedelta(days=2)).date()
     history = db_session.query(models.ReviewHistory).all()
     assert len(history) == 1
     assert history[0].correct is True
@@ -90,7 +90,7 @@ def test_apply_result_wrong_resets_interval(db_session):
     db_session.flush()
 
     assert rq.interval_days == 1
-    assert rq.due_date.date() == (datetime.utcnow() + timedelta(days=1)).date()
+    assert rq.due_date.date() == (datetime.now(timezone.utc) + timedelta(days=1)).date()
     history = db_session.query(models.ReviewHistory).one()
     assert history.correct is False
 

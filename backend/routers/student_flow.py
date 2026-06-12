@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -247,7 +247,7 @@ def submit_attempt(
             "status": ea.status.value,
         }
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     ea.status = models.AttemptStatus.submitted
     ea.submitted_at = now
     for sa in ea.station_attempts:

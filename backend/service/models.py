@@ -43,14 +43,6 @@ class AttemptStatus(str, enum.Enum):
     submitted = "submitted"
     graded = "graded"
 
-class ChatSide(str, enum.Enum):
-    user = "user"
-    ai = "ai"
-
-class VirtualPatientRole(str, enum.Enum):
-    student = "student"
-    patient = "patient"
-
 # -------------------- CORE ENTITIES --------------------
 
 class User(Base):
@@ -187,9 +179,6 @@ class Station(Base):
         cascade="all, delete-orphan",
         order_by="Question.display_order",
     )
-    rubrics: Mapped[List["Rubric"]] = relationship(
-        "Rubric", back_populates="station", cascade="all, delete-orphan"
-    )
     station_attempts: Mapped[List["StationAttempt"]] = relationship(
         "StationAttempt", back_populates="station"
     )
@@ -267,30 +256,8 @@ class StationAttempt(Base):
     answers: Mapped[List["Answer"]] = relationship(
         "Answer", back_populates="station_attempt", cascade="all, delete-orphan"
     )
-    messages: Mapped[List["ChatMessage"]] = relationship(
-        "ChatMessage",
-        back_populates="station_attempt",
-        cascade="all, delete-orphan",
-        order_by="ChatMessage.created_at",
-    )
-    rubric_marks: Mapped[List["RubricMark"]] = relationship(
-        "RubricMark", back_populates="station_attempt", cascade="all, delete-orphan"
-    )
     feedbacks: Mapped[List["Feedback"]] = relationship(
         "Feedback", back_populates="station_attempt", cascade="all, delete-orphan"
-    )
-
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station_attempt_id: Mapped[int] = mapped_column(
-        ForeignKey("station_attempts.id"), nullable=False
-    )
-    side: Mapped[ChatSide] = mapped_column(Enum(ChatSide), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    station_attempt: Mapped["StationAttempt"] = relationship(
-        "StationAttempt", back_populates="messages"
     )
 
 class Answer(Base):
@@ -313,40 +280,7 @@ class Answer(Base):
     )
     question: Mapped["Question"] = relationship("Question", back_populates="answers")
 
-# -------------------- RUBRICS & FEEDBACK --------------------
-
-class Rubric(Base):
-    __tablename__ = "rubrics"
-    __table_args__ = (
-        UniqueConstraint("station_id", "rubric_key", name="uq_rubric_key"),
-    )
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"), nullable=False)
-    rubric_key: Mapped[str] = mapped_column(String(100), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    max_points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    station: Mapped["Station"] = relationship("Station", back_populates="rubrics")
-    rubric_marks: Mapped[List["RubricMark"]] = relationship(
-        "RubricMark", back_populates="rubric", cascade="all, delete-orphan"
-    )
-
-class RubricMark(Base):
-    __tablename__ = "rubric_marks"
-    __table_args__ = (
-        UniqueConstraint("station_attempt_id", "rubric_id", name="uq_rubric_once"),
-    )
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station_attempt_id: Mapped[int] = mapped_column(
-        ForeignKey("station_attempts.id"), nullable=False
-    )
-    rubric_id: Mapped[int] = mapped_column(ForeignKey("rubrics.id"), nullable=False)
-    met: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    points: Mapped[Optional[int]] = mapped_column(Integer)
-    station_attempt: Mapped["StationAttempt"] = relationship(
-        "StationAttempt", back_populates="rubric_marks"
-    )
-    rubric: Mapped["Rubric"] = relationship("Rubric", back_populates="rubric_marks")
+# -------------------- FEEDBACK --------------------
 
 class Feedback(Base):
     __tablename__ = "feedback"

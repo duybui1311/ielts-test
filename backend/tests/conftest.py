@@ -5,6 +5,7 @@ session and wired in by overriding the `get_db` dependency, so nothing ever
 touches the real Supabase Postgres. We also pin a valid `JWT_SECRET` before the
 app is imported so token signing/verification works under test.
 """
+import logging
 import os
 
 # Must be set before any backend module (config/database/auth_deps) is imported.
@@ -45,13 +46,17 @@ TestingSessionLocal = sessionmaker(bind=_engine, autocommit=False, autoflush=Fal
 
 
 def _create_schema():
-    """Build the test schema. Prefer the full model set; if any model proves
-    incompatible with SQLite, fall back to just the User table so the auth and
-    health tests can still run."""
+    """Build the full test schema.
+
+    We deliberately do NOT swallow errors here. A schema that fails to build is
+    a real bug; silently falling back to a partial (User-only) schema would mask
+    the true cause and make unrelated tests fail in confusing ways. So we log the
+    full exception and re-raise loudly, pointing straight at the real problem."""
     try:
         Base.metadata.create_all(bind=_engine)
     except Exception:
-        models.User.__table__.create(bind=_engine, checkfirst=True)
+        logging.exception("Failed to build the test database schema")
+        raise
 
 
 _create_schema()

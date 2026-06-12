@@ -448,5 +448,39 @@ def test_exam_with_only_writing_has_no_overall_band(db_session):
     assert ea.status == models.AttemptStatus.graded
 
 
+def test_overall_band_rounds_quarter_up(db_session):
+    # Station bands 6.0 and 6.5 average to exactly 6.25. IELTS rounds .25 UP to
+    # 6.5 (Python's banker's round() would wrongly give 6.0).
+    owner = f.make_user(db_session, role=models.UserRole.teacher)
+    student = f.make_user(db_session)
+    exam = f.make_exam(db_session, owner)
+    ea = f.make_attempt(db_session, exam, student)
+
+    # Station 1: 26/40 scaled -> reading band 6.0. Use 13 of 20 correct (scaled 26).
+    st1 = f.make_station(db_session, exam, owner, skill="reading", position=1)
+    sa1 = f.make_station_attempt(db_session, ea, st1)
+    for i in range(20):
+        q = f.make_question(db_session, st1, models.QuestionType.mcq,
+                            correct_index=1, display_order=i + 1)
+        f.make_answer(db_session, sa1, q, choice_index=1 if i < 13 else 0)
+
+    # Station 2: 27/40 scaled -> reading band 6.5. Use 27 of 40 correct.
+    st2 = f.make_station(db_session, exam, owner, skill="reading", position=2)
+    sa2 = f.make_station_attempt(db_session, ea, st2)
+    for i in range(40):
+        q = f.make_question(db_session, st2, models.QuestionType.mcq,
+                            correct_index=1, display_order=i + 1)
+        f.make_answer(db_session, sa2, q, choice_index=1 if i < 27 else 0)
+    db_session.flush()
+
+    autograde_exam_attempt(db_session, ea.id)
+    db_session.refresh(sa1)
+    db_session.refresh(sa2)
+    db_session.refresh(ea)
+    assert sa1.band == 6.0
+    assert sa2.band == 6.5
+    assert ea.overall_band == 6.5      # 6.25 rounded up, not banker's-rounded to 6.0
+
+
 def test_missing_exam_attempt_returns_none(db_session):
     assert autograde_exam_attempt(db_session, 999999) is None

@@ -1,4 +1,5 @@
-from datetime import datetime
+import math
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from backend.service.models import (
     StationAttempt,
@@ -83,7 +84,25 @@ def autograde_station_attempt(db: Session, station_attempt_id: int):
     return {"raw_score": correct, "total": len(autogradable), "band": sa.band}
 
 
+# Skills the platform auto-grades into a numeric band. Writing/Speaking are NOT
+# here — they are graded separately (AI draft + teacher review) and stored on
+# WritingSubmission/SpeakingSubmission, not on StationAttempt.band.
+AUTO_GRADED_SKILLS = ("listening", "reading")
+
+
 def autograde_exam_attempt(db: Session, exam_attempt_id: int):
+    """Auto-grade every station of an attempt and set the overall band.
+
+    `overall_band` is the mean of the AUTO-GRADED skills only — i.e. the
+    Reading and Listening stations. Writing and Speaking are graded elsewhere
+    (AI grading + teacher review, persisted on WritingSubmission /
+    SpeakingSubmission), so they never contribute to this average. An exam with
+    no reading/listening station leaves `overall_band` as None.
+
+    The mean is rounded the way IELTS rounds: halves go UP to the next half band
+    (6.25 -> 6.5, 6.75 -> 7.0). Python's built-in round() uses banker's rounding
+    (half-to-even) and would wrongly send 6.25 -> 6.0, so we don't use it.
+    """
     ea = db.query(ExamAttempt).filter(ExamAttempt.id == exam_attempt_id).first()
     if not ea:
         return None
@@ -93,11 +112,17 @@ def autograde_exam_attempt(db: Session, exam_attempt_id: int):
     bands = []
     for sa in sas:
         autograde_station_attempt(db, sa.id)
-        if sa.band is not None:
+        # Only Reading/Listening stations contribute to the overall band. Check
+        # the station skill explicitly (not just `band is not None`) so a future
+        # writing station that accidentally sets band=0 can't pollute the mean.
+        station = db.query(Station).filter(Station.id == sa.station_id).first()
+        skill = station.skill if station else None
+        if skill in AUTO_GRADED_SKILLS and sa.band is not None:
             bands.append(sa.band)
     if bands:
-        ea.overall_band = round((sum(bands) / len(bands)) * 2) / 2   # nearest 0.5
+        mean = sum(bands) / len(bands)
+        ea.overall_band = math.floor(mean * 2 + 0.5) / 2   # nearest 0.5, halves up
     ea.status = AttemptStatus.graded
-    ea.graded_at = datetime.utcnow()
+    ea.graded_at = datetime.now(timezone.utc)
     db.commit()
     return ea

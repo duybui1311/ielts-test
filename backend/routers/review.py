@@ -3,7 +3,7 @@
 Identity comes from the verified JWT; teacher/admin role required for grading.
 """
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -104,7 +104,7 @@ def grade_writing(
     s.status = "reviewed"
     s.approved_by_teacher = True          # a teacher-approved grade is visible to the student
     s.reviewed_by = uid
-    s.reviewed_at = datetime.utcnow()
+    s.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
 
@@ -129,7 +129,7 @@ def grade_speaking(
     s.status = "reviewed"
     s.approved_by_teacher = True
     s.reviewed_by = uid
-    s.reviewed_at = datetime.utcnow()
+    s.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
 
@@ -184,7 +184,7 @@ def review_due(
     user: models.User = Depends(get_current_user),
 ):
     """Questions whose review is due today (or overdue) for the current user."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     rows = (
         db.query(models.ReviewQueue)
         .filter(
@@ -202,7 +202,7 @@ def review_due_count(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     n = (
         db.query(models.ReviewQueue)
         .filter(
