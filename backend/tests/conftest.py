@@ -72,3 +72,20 @@ def client():
     # firing the app lifespan (which would call create_all against the real
     # Supabase engine).
     return TestClient(app)
+
+
+@pytest.fixture()
+def db_session():
+    """A plain ORM session bound to the in-memory test DB, for exercising the
+    service layer directly. Every table is wiped on teardown so each test starts
+    from an empty database."""
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.rollback()
+        db.close()
+        # Children-before-parents (reversed sorted order) so we never trip a FK.
+        with _engine.begin() as conn:
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(table.delete())
