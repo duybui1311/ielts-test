@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import get_current_user
-from backend.routers.auth import hash_password, verify_password
+from backend.routers.auth import hash_password, verify_password, validate_password
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
@@ -55,8 +55,7 @@ def change_password(
 ):
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(400, "Current password is incorrect.")
-    if len(payload.new_password or "") < 6:
-        raise HTTPException(400, "New password must be at least 6 characters.")
+    validate_password(payload.new_password)
     user.password_hash = hash_password(payload.new_password)
     db.commit()
     return {"ok": True}

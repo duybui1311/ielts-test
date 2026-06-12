@@ -33,6 +33,24 @@ def test_public_url_with_unset_base(monkeypatch):
     assert url == "/storage/v1/object/public/writing-charts/x.png"
 
 
+def test_public_url_repairs_colonless_scheme(monkeypatch):
+    # A colon-less scheme ("https//host") must be repaired to a valid absolute
+    # URL, NOT have a second scheme glued on top ("https://https//host").
+    monkeypatch.setenv("SUPABASE_URL", "https//abc.supabase.co")
+    url = storage._public_url("writing-charts", "file.png")
+    assert url == "https://abc.supabase.co/storage/v1/object/public/writing-charts/file.png"
+
+
+def test_normalize_public_base_cases():
+    # Well-formed scheme always; trailing slash stripped; bare host gets https.
+    assert storage.normalize_public_base("https//abc.supabase.co") == "https://abc.supabase.co"
+    assert storage.normalize_public_base("abc.supabase.co/") == "https://abc.supabase.co"
+    assert storage.normalize_public_base("https://abc.supabase.co/") == "https://abc.supabase.co"
+    assert storage.normalize_public_base("http://localhost:54321") == "http://localhost:54321"
+    assert storage.normalize_public_base("") == ""
+    assert storage.normalize_public_base(None) == ""
+
+
 def test_is_configured_true_when_both_present(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://abc.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_KEY", "service-key")
