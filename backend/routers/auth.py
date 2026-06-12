@@ -31,6 +31,25 @@ class LoginOut(BaseModel):
     token: str
 
 
+MIN_PASSWORD_LEN = 8
+
+
+def validate_password(plain: Optional[str]) -> None:
+    """Enforce the password policy, raising HTTP 400 on violation.
+
+    Shared by registration and password change so both paths apply the same
+    rule: a non-empty password (not just whitespace) of at least
+    MIN_PASSWORD_LEN characters.
+    """
+    if not plain or not plain.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password is required.")
+    if len(plain) < MIN_PASSWORD_LEN:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Password must be at least {MIN_PASSWORD_LEN} characters.",
+        )
+
+
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -83,8 +102,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> LoginOut:
     email = (payload.email or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A valid email is required.")
-    if len(payload.password or "") < 6:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password must be at least 6 characters.")
+    validate_password(payload.password)
 
     # Self-signup is students only. Teacher/admin accounts are provisioned by
     # hand (seed) or a future admin page, so the requested role is ignored here.

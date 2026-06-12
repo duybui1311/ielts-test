@@ -54,7 +54,8 @@ export default function Settings() {
 
   const savePassword = async () => {
     setPwError("");
-    if (newPw.length < 6) { setPwError("New password must be at least 6 characters."); return; }
+    if (!newPw.trim()) { setPwError("New password is required."); return; }
+    if (newPw.length < 8) { setPwError("New password must be at least 8 characters."); return; }
     if (newPw !== confirmPw) { setPwError("New passwords don't match."); return; }
     setSavingPw(true);
     try {
@@ -106,7 +107,7 @@ export default function Settings() {
         {pwError && <Alert severity="error" sx={{ mb: 2 }}>{pwError}</Alert>}
         <Stack spacing={2} sx={{ maxWidth: 360 }}>
           <TextField label="Current password" type="password" size="small" value={curPw} onChange={(e) => setCurPw(e.target.value)} />
-          <TextField label="New password" type="password" size="small" value={newPw} onChange={(e) => setNewPw(e.target.value)} helperText="At least 6 characters" />
+          <TextField label="New password" type="password" size="small" value={newPw} onChange={(e) => setNewPw(e.target.value)} helperText="At least 8 characters" />
           <TextField label="Confirm new password" type="password" size="small" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
           <Box>
             <Button variant="outlined" onClick={savePassword} disabled={savingPw || !curPw || !newPw}>

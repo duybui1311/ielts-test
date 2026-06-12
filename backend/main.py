@@ -47,11 +47,14 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="IELTS Platform API", version="0.1.0", lifespan=lifespan)
 
+    # Browsers send the Origin header with no trailing slash, so a configured
+    # FRONTEND_URL like "https://app.pages.dev/" would never match. Normalize it.
     origins = {
-        settings.FRONTEND_URL,
+        (settings.FRONTEND_URL or "").rstrip("/"),
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     }
+    origins.discard("")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(origins),

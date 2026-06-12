@@ -112,7 +112,14 @@ def review_card(
     user: models.User = Depends(get_current_user),
 ):
     uid = user.id
-    card = db.query(models.Flashcard).filter(models.Flashcard.id == payload.card_id).first()
+    # Only review a card in a deck you own — a card_id alone must not let one
+    # user write review rows against another user's deck.
+    card = (
+        db.query(models.Flashcard)
+        .join(models.FlashcardDeck, models.Flashcard.deck_id == models.FlashcardDeck.id)
+        .filter(models.Flashcard.id == payload.card_id, models.FlashcardDeck.owner_id == uid)
+        .first()
+    )
     if not card:
         raise HTTPException(404, "Card not found")
     db.add(models.FlashcardReview(card_id=payload.card_id, user_id=uid, rating=payload.rating))

@@ -37,6 +37,11 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 
 MODEL = "claude-sonnet-4-6"
 
+# Cap the uploaded test file so a huge upload can't exhaust server memory. We
+# read at most MAX_UPLOAD_BYTES + 1 bytes, so an oversized file is rejected
+# without ever being fully loaded.
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
 # Tool schema the model must fill — mirrors tests_io.TestIn so the result can be
 # saved directly through POST /api/tests/import after teacher review.
 TEST_TOOL = {
@@ -416,5 +421,15 @@ async def ai_import(
             f"Unknown LLM_PROVIDER '{provider}'. Use 'gemini', 'claude', or 'local'.",
         )
 
-    data = await file.read()
+    # Read one byte past the limit so we can detect (and reject) oversized files
+    # without loading the whole upload into memory.
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            413,
+            f"File is too large. The maximum upload size is "
+            f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
+    if not data:
+        raise HTTPException(400, "The uploaded file is empty.")
     return run(file, data)

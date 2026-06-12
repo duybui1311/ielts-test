@@ -1,7 +1,7 @@
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 from sqlalchemy.orm import Session
 import bcrypt
 from backend.service.database import get_db
@@ -11,6 +11,14 @@ from backend.service.auth_deps import get_current_user, require_role
 router = APIRouter(prefix="/api/tests", tags=["tests"])
 
 _teacher = require_role("teacher", "admin")
+
+# Closed vocabularies, validated at the API boundary so malformed input is
+# rejected with a 422 instead of raising deep in the handler (a 500). These
+# mirror the model enums (DifficultyLevel, QuestionType) and the Station.skill
+# values the autograder keys off.
+Difficulty = Literal["low", "medium", "high"]
+QType = Literal["mcq", "short", "explain"]
+Skill = Literal["reading", "listening", "writing", "speaking"]
 
 # kind -> (Supabase Storage bucket, default extension, default content-type)
 _UPLOAD_KINDS = {
@@ -54,7 +62,7 @@ async def upload_media(
 
 
 class QuestionIn(BaseModel):
-    qtype: str                                  # mcq | short | explain
+    qtype: QType                                # mcq | short | explain
     prompt: str
     options: Optional[List[str]] = None         # for mcq
     correct_index: Optional[int] = None         # for mcq
@@ -67,7 +75,7 @@ class QuestionIn(BaseModel):
 
 class SectionIn(BaseModel):
     position: int
-    skill: str                                  # listening | reading | writing | speaking
+    skill: Skill                                # listening | reading | writing | speaking
     title: str
     passage_md: str = ""
     audio_url: Optional[str] = None             # listening audio
@@ -77,7 +85,7 @@ class SectionIn(BaseModel):
 
 class TestIn(BaseModel):
     name: str
-    difficulty: str = "medium"                  # low | medium | high
+    difficulty: Difficulty = "medium"           # low | medium | high
     time_limit_min: int = 60
     reading_min: int = 0
     access_code: str = "1234"
@@ -150,13 +158,13 @@ def import_test(
 
 class TestPatchIn(BaseModel):
     name: Optional[str] = None
-    difficulty: Optional[str] = None            # low | medium | high
+    difficulty: Optional[Difficulty] = None     # low | medium | high
     time_limit_min: Optional[int] = None
 
 
 class TestUpdateIn(BaseModel):
     name: str
-    difficulty: str = "medium"
+    difficulty: Difficulty = "medium"
     time_limit_min: int = 60
     sections: List[SectionIn]
 

@@ -42,7 +42,9 @@ export default function Signup() {
 
 		const trimmedEmail = email.trim();
 		if (!trimmedEmail || !trimmedEmail.includes("@")) { setError("Please enter a valid email."); return; }
-		if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+		// Mirror the backend policy (validate_password): non-blank, at least 8 chars.
+		if (!password.trim()) { setError("Password is required."); return; }
+		if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
 
 		try {
 			setSubmitting(true);
@@ -205,7 +207,7 @@ export default function Signup() {
 							onChange={(e) => setPassword(e.target.value)}
 							fullWidth
 							required
-							helperText="At least 6 characters"
+							helperText="At least 8 characters"
 							slotProps={{
 								input: {
 									startAdornment: (
