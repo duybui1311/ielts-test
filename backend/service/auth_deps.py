@@ -23,14 +23,24 @@ TOKEN_TTL_HOURS = 24
 _UNAUTHENTICATED = {"WWW-Authenticate": "Bearer"}
 
 
+_MIN_SECRET_LEN = 32
+
+
 def _secret() -> str:
-    if not settings.JWT_SECRET:
+    secret = settings.JWT_SECRET
+    if not secret:
         # Configuration error, not a client error.
         raise RuntimeError(
             "JWT_SECRET is not set. Add JWT_SECRET to backend/.env (a long random "
             "string) and restart the backend."
         )
-    return settings.JWT_SECRET
+    if len(secret) < _MIN_SECRET_LEN:
+        # A short secret is brute-forceable, so it is as risky as a missing one.
+        raise RuntimeError(
+            f"JWT_SECRET is too short ({len(secret)} chars). Use at least "
+            f"{_MIN_SECRET_LEN} characters (a long random string) and restart the backend."
+        )
+    return secret
 
 
 def create_access_token(user_id: int, role: str) -> str:

@@ -13,3 +13,4 @@ supabase==2.15.0
 pypdf
 python-docx
 httpx==0.28.1
+pytest

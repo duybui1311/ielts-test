@@ -1,10 +1,13 @@
+import logging
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from .service.config import settings
 from .service.database import Base, engine
 from .service import models  # noqa: F401  (registers tables)
@@ -16,6 +19,8 @@ from .routers import (
 )
 
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+
+logger = logging.getLogger("backend")
 
 
 # Columns added to existing tables after the original schema. `create_all` only
@@ -54,6 +59,20 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Last-resort error handling: log the real cause server-side and return a
+    # clean JSON 500 so no stack trace or DB detail leaks to the client. Routes
+    # keep raising HTTPException for expected errors (handled by FastAPI itself);
+    # these only catch the unexpected.
+    @app.exception_handler(SQLAlchemyError)
+    async def _on_db_error(request: Request, exc: SQLAlchemyError):
+        logger.exception("Database error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    @app.exception_handler(Exception)
+    async def _on_unhandled_error(request: Request, exc: Exception):
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     app.include_router(auth.router)
     app.include_router(tests_io.router)
