@@ -20,6 +20,42 @@ def test_register_student_returns_token(client):
     assert body["role"] == "student"
 
 
+def test_register_duplicate_email_is_409(client):
+    _register(client, "dupe@example.com")
+    resp = _register(client, "dupe@example.com")
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["detail"].lower()
+
+
+def test_register_short_password_is_400(client):
+    resp = _register(client, "shortpw@example.com", password="abc123")  # 6 chars
+    assert resp.status_code == 400
+    assert "8 characters" in resp.json()["detail"]
+
+
+def test_register_blank_password_is_400(client):
+    resp = _register(client, "blankpw@example.com", password="        ")  # whitespace only
+    assert resp.status_code == 400
+    assert "required" in resp.json()["detail"].lower()
+
+
+def test_register_eight_char_password_succeeds(client):
+    # Exactly the minimum length is accepted.
+    resp = _register(client, "eightok@example.com", password="12345678")
+    assert resp.status_code == 201
+
+
+def test_change_password_below_min_is_400(client):
+    token = _register(client, "changepw@example.com", password="secret123").json()["token"]
+    resp = client.post(
+        "/api/me/password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": "secret123", "new_password": "short1"},  # 6 chars
+    )
+    assert resp.status_code == 400
+    assert "8 characters" in resp.json()["detail"]
+
+
 def test_login_with_valid_credentials_returns_token(client):
     _register(client, "loginok@example.com", password="secret123")
     resp = client.post(
