@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Tabs, Tab, Table, TableHead, TableBody, TableRow,
   TableCell, TextField, MenuItem, Switch, IconButton, Button, Chip, CircularProgress,
-  Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip, InputAdornment,
+  Alert, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
+  InputAdornment, useTheme,
 } from "@mui/material";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
@@ -10,6 +11,9 @@ import PeopleAltRoundedIcon from "@mui/icons-material/PeopleAltRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import MenuBookRoundedIcon from "@mui/icons-material/MenuBookRounded";
 import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
+import PersonAddRoundedIcon from "@mui/icons-material/PersonAddRounded";
+import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
+import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
 import { Navigate } from "react-router-dom";
 import { apiFetch, getUserId } from "../api";
 import { PageHeader, StatCard } from "../component/ui";
@@ -19,7 +23,10 @@ const isAdmin = () => {
   catch { return false; }
 };
 
+const BLANK_CREATE = { full_name: "", email: "", username: "", password: "", role: "teacher" };
+
 export default function Admin() {
+  const theme = useTheme();
   const [tab, setTab] = useState(0);
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -29,6 +36,17 @@ export default function Admin() {
   const [toast, setToast] = useState("");
   const [confirm, setConfirm] = useState(null); // { kind: 'user'|'test', id, name }
   const [query, setQuery] = useState("");
+
+  // create-user dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(BLANK_CREATE);
+  const [createErr, setCreateErr] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // reset-password dialog
+  const [pwTarget, setPwTarget] = useState(null); // { id, name }
+  const [pwValue, setPwValue] = useState("");
+  const [pwErr, setPwErr] = useState("");
 
   const myId = getUserId();
 
@@ -58,6 +76,55 @@ export default function Admin() {
     } catch (e) { setError(e.message); }
   };
 
+  const createUser = async () => {
+    setCreateErr("");
+    const f = createForm;
+    if (!f.email.trim() || !f.email.includes("@")) { setCreateErr("A valid email is required."); return; }
+    if (f.password.length < 8) { setCreateErr("Password must be at least 8 characters."); return; }
+    setSaving(true);
+    try {
+      const res = await apiFetch("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({
+          email: f.email.trim(),
+          password: f.password,
+          full_name: f.full_name.trim() || null,
+          username: f.username.trim() || null,
+          role: f.role,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not create user.");
+      setUsers((us) => [...us, data]);
+      setOverview((o) => o && ({ ...o, users: o.users + 1, active_users: o.active_users + 1,
+        teachers: o.teachers + (f.role === "teacher" ? 1 : 0),
+        students: o.students + (f.role === "student" ? 1 : 0),
+        admins: o.admins + (f.role === "admin" ? 1 : 0) }));
+      setToast(`${f.role[0].toUpperCase()}${f.role.slice(1)} account created.`);
+      setCreateOpen(false);
+      setCreateForm(BLANK_CREATE);
+    } catch (e) { setCreateErr(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const resetPassword = async () => {
+    setPwErr("");
+    if (pwValue.length < 8) { setPwErr("Password must be at least 8 characters."); return; }
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/api/admin/users/${pwTarget.id}/password`, {
+        method: "POST",
+        body: JSON.stringify({ password: pwValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not reset password.");
+      setToast(`Password reset for ${pwTarget.name}.`);
+      setPwTarget(null);
+      setPwValue("");
+    } catch (e) { setPwErr(e.message); }
+    finally { setSaving(false); }
+  };
+
   const doDelete = async () => {
     const { kind, id } = confirm;
     try {
@@ -78,17 +145,27 @@ export default function Admin() {
 
   return (
     <Box>
-      <PageHeader title="Admin" subtitle="Manage users, tests and monitor the platform." />
+      <PageHeader
+        eyebrow="Platform"
+        title="Admin"
+        subtitle="Manage users, tests and monitor the platform."
+        icon={<AdminPanelSettingsRoundedIcon />}
+        action={
+          <Button variant="contained" startIcon={<PersonAddRoundedIcon />} onClick={() => { setCreateErr(""); setCreateForm(BLANK_CREATE); setCreateOpen(true); }}>
+            New account
+          </Button>
+        }
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 
       {/* Overview KPIs */}
       {overview && (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 2, mb: 3 }}>
-          <StatCard icon={<PeopleAltRoundedIcon />} label="Users" value={overview.users} hint={`${overview.active_users} active`} color="primary.main" />
-          <StatCard icon={<SchoolRoundedIcon />} label="Students / Teachers" value={`${overview.students} / ${overview.teachers}`} color="secondary.main" />
-          <StatCard icon={<MenuBookRoundedIcon />} label="Tests" value={overview.exams} color="success.main" />
-          <StatCard icon={<AssignmentTurnedInRoundedIcon />} label="Attempts" value={overview.attempts} color="warning.main" />
+          <StatCard icon={<PeopleAltRoundedIcon />} label="Users" value={overview.users} hint={`${overview.active_users} active`} gradient={theme.gradients.brand} color="primary.main" delay={40} />
+          <StatCard icon={<SchoolRoundedIcon />} label="Students / Teachers" value={`${overview.students} / ${overview.teachers}`} gradient={theme.gradients.ocean} color="info.main" delay={120} />
+          <StatCard icon={<MenuBookRoundedIcon />} label="Tests" value={overview.exams} gradient={theme.gradients.emerald} color="success.main" delay={200} />
+          <StatCard icon={<AssignmentTurnedInRoundedIcon />} label="Attempts" value={overview.attempts} gradient={theme.gradients.sunset} color="warning.main" delay={280} />
         </Box>
       )}
 
@@ -114,7 +191,7 @@ export default function Admin() {
                 <TableCell>Role</TableCell>
                 <TableCell align="center">Active</TableCell>
                 <TableCell align="right">Attempts</TableCell>
-                <TableCell align="right" />
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -150,6 +227,14 @@ export default function Admin() {
                     </TableCell>
                     <TableCell align="right">{u.attempts}</TableCell>
                     <TableCell align="right">
+                      <Tooltip title="Reset password">
+                        <IconButton
+                          size="small"
+                          onClick={() => { setPwErr(""); setPwValue(""); setPwTarget({ id: u.id, name: u.full_name || u.email }); }}
+                        >
+                          <LockResetRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title={self ? "You can't delete yourself" : "Delete user"}>
                         <span>
                           <IconButton
@@ -209,6 +294,56 @@ export default function Admin() {
           </Table>
         </Card>
       )}
+
+      {/* Create-account dialog */}
+      <Dialog open={createOpen} onClose={() => !saving && setCreateOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>New account</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Create a teacher, student or admin account. Teachers can't self-register, so add them here.
+          </Typography>
+          {createErr && <Alert severity="error" sx={{ mb: 2 }}>{createErr}</Alert>}
+          <Stack spacing={2}>
+            <TextField label="Full name" value={createForm.full_name} onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))} fullWidth autoFocus />
+            <TextField label="Email" type="email" required value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} fullWidth />
+            <TextField label="Username (optional)" value={createForm.username} onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))} fullWidth />
+            <TextField label="Temporary password" type="text" required helperText="At least 8 characters" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} fullWidth />
+            <TextField select label="Role" value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))} fullWidth>
+              {["teacher", "student", "admin"].map((r) => (
+                <MenuItem key={r} value={r} sx={{ textTransform: "capitalize" }}>{r}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={createUser} disabled={saving}>
+            {saving ? "Creating…" : "Create account"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reset-password dialog */}
+      <Dialog open={!!pwTarget} onClose={() => !saving && setPwTarget(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Reset password</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Set a new password for <strong>{pwTarget?.name}</strong>. They can sign in with it immediately.
+          </Typography>
+          {pwErr && <Alert severity="error" sx={{ mb: 2 }}>{pwErr}</Alert>}
+          <TextField
+            label="New password" type="text" fullWidth autoFocus
+            helperText="At least 8 characters"
+            value={pwValue} onChange={(e) => setPwValue(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPwTarget(null)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={resetPassword} disabled={saving}>
+            {saving ? "Saving…" : "Set password"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!confirm} onClose={() => setConfirm(null)} fullWidth maxWidth="xs">
         <DialogTitle>Delete {confirm?.kind}?</DialogTitle>

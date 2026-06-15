@@ -9,16 +9,34 @@ Admin is identified by the verified JWT (role must be `admin`, enforced by the
 Identity and role come from the verified JWT (never a client-supplied header).
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import require_role
+from backend.routers.auth import hash_password, validate_password
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+# Roles an admin may assign when creating an account.
+_ASSIGNABLE_ROLES = {"student", "teacher", "admin"}
+
+
+def _user_row(u: models.User, attempts: int = 0) -> dict:
+    """Serialise a user the same way list_users does, for create/list parity."""
+    return {
+        "id": u.id,
+        "full_name": u.full_name,
+        "email": u.email,
+        "username": u.username,
+        "role": u.role.value,
+        "is_active": u.is_active,
+        "attempts": attempts,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+    }
 
 
 @router.get("/overview")
@@ -72,6 +90,75 @@ def list_users(
         }
         for u in users
     ]
+
+
+class CreateUserIn(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = None
+    username: Optional[str] = None
+    role: str = "teacher"               # student | teacher | admin (default teacher)
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+def create_user(
+    payload: CreateUserIn,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_role("admin")),
+):
+    """Provision an account with any role. The primary use is creating teacher
+    accounts, since self-signup is students-only."""
+    email = (payload.email or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A valid email is required.")
+    if payload.role not in _ASSIGNABLE_ROLES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid role.")
+    validate_password(payload.password)
+
+    username = (payload.username or "").strip().lower() or None
+    conflicts = [func.lower(models.User.email) == email]
+    if username:
+        conflicts.append(func.lower(models.User.username) == username)
+    if db.query(models.User).filter(or_(*conflicts)).first():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "An account with that email or username already exists.",
+        )
+
+    user = models.User(
+        email=email,
+        username=username,
+        full_name=(payload.full_name or "").strip() or None,
+        role=models.UserRole(payload.role),
+        password_hash=hash_password(payload.password),
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _user_row(user)
+
+
+class PasswordIn(BaseModel):
+    password: str
+
+
+@router.post("/users/{user_id}/password")
+def set_user_password(
+    user_id: int,
+    payload: PasswordIn,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_role("admin")),
+):
+    """Set/reset a user's password (admin-initiated, e.g. onboarding a teacher
+    or recovering a locked-out account)."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    validate_password(payload.password)
+    user.password_hash = hash_password(payload.password)
+    db.commit()
+    return {"ok": True, "id": user.id}
 
 
 class UserPatchIn(BaseModel):
