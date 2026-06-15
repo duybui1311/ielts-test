@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 import enum
 from sqlalchemy import (
@@ -16,6 +16,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .database import Base
+
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC now, used as the default for every timestamp column.
+
+    Replaces the deprecated naive ``utcnow`` and matches the rest of
+    the codebase (routers/services already use ``datetime.now(timezone.utc)``),
+    so stored defaults and explicit assignments agree.
+    """
+    return datetime.now(timezone.utc)
+
 
 # -------------------- ENUM TYPES --------------------
 
@@ -56,9 +67,9 @@ class User(Base):
     )
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
     classes: Mapped[List["Class"]] = relationship("Class", back_populates="owner")
     enrolments: Mapped[List["ClassEnrolment"]] = relationship(
@@ -87,9 +98,9 @@ class Class(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
     owner: Mapped["User"] = relationship("User", back_populates="classes")
     enrolments: Mapped[List["ClassEnrolment"]] = relationship(
@@ -105,7 +116,7 @@ class ClassEnrolment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     class_id: Mapped[int] = mapped_column(ForeignKey("classes.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     klass: Mapped["Class"] = relationship("Class", back_populates="enrolments")
     user: Mapped["User"] = relationship("User", back_populates="enrolments")
 
@@ -116,9 +127,9 @@ class Case(Base):
     body_md: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[Optional[list]] = mapped_column(JSON, default=list)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
     author: Mapped["User"] = relationship("User", back_populates="cases")
     stations: Mapped[List["Station"]] = relationship("Station", back_populates="case")
@@ -139,9 +150,9 @@ class Exam(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     start_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
     klass: Mapped["Class"] = relationship("Class", back_populates="exams")
     author: Mapped["User"] = relationship("User", back_populates="exams")
@@ -217,7 +228,7 @@ class ExamAttempt(Base):
     status: Mapped[AttemptStatus] = mapped_column(
         Enum(AttemptStatus), nullable=False, default=AttemptStatus.draft
     )
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     graded_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     total_score: Mapped[Optional[float]] = mapped_column(Float)
@@ -245,7 +256,7 @@ class StationAttempt(Base):
     )
     work_min: Mapped[Optional[int]] = mapped_column(Integer)
     reading_min: Mapped[Optional[int]] = mapped_column(Integer)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     raw_score: Mapped[Optional[float]] = mapped_column(Float)       # IELTS addition
     band: Mapped[Optional[float]] = mapped_column(Float)           # IELTS addition
@@ -274,7 +285,7 @@ class Answer(Base):
     choice_index: Mapped[Optional[int]] = mapped_column(Integer)
     is_auto_correct: Mapped[Optional[bool]] = mapped_column(Boolean)
     auto_score: Mapped[Optional[float]] = mapped_column(Float)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     station_attempt: Mapped["StationAttempt"] = relationship(
         "StationAttempt", back_populates="answers"
     )
@@ -290,7 +301,7 @@ class Feedback(Base):
     )
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     station_attempt: Mapped["StationAttempt"] = relationship(
         "StationAttempt", back_populates="feedbacks"
     )
@@ -304,7 +315,7 @@ class ExamAccessLog(Base):
     ip: Mapped[Optional[str]] = mapped_column(String(64))
     user_agent: Mapped[Optional[str]] = mapped_column(String(500))
     accepted_integrity: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    verified_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    verified_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     exam: Mapped["Exam"] = relationship("Exam", back_populates="access_logs")
     user: Mapped["User"] = relationship("User", back_populates="access_logs")
 
@@ -315,9 +326,9 @@ class FlashcardDeck(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
     owner: Mapped["User"] = relationship("User", back_populates="flashcard_decks")
     cards: Mapped[List["Flashcard"]] = relationship(
@@ -330,7 +341,7 @@ class Flashcard(Base):
     deck_id: Mapped[int] = mapped_column(ForeignKey("flashcard_decks.id"), nullable=False)
     front: Mapped[str] = mapped_column(Text, nullable=False)
     back: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deck: Mapped["FlashcardDeck"] = relationship("FlashcardDeck", back_populates="cards")
     reviews: Mapped[List["FlashcardReview"]] = relationship(
         "FlashcardReview", back_populates="card", cascade="all, delete-orphan"
@@ -342,7 +353,7 @@ class FlashcardReview(Base):
     card_id: Mapped[int] = mapped_column(ForeignKey("flashcards.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
-    reviewed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     card: Mapped["Flashcard"] = relationship("Flashcard", back_populates="reviews")
     user: Mapped["User"] = relationship("User", back_populates="flashcard_reviews")
 
@@ -358,7 +369,7 @@ class WritingTask(Base):
     time_limit_min: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     min_words: Mapped[Optional[int]] = mapped_column(Integer)           # word threshold (null -> task-type default)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class SpeakingTask(Base):
@@ -370,7 +381,7 @@ class SpeakingTask(Base):
     prep_sec: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     answer_sec: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class WritingSubmission(Base):
@@ -386,7 +397,7 @@ class WritingSubmission(Base):
     ai_result: Mapped[Optional[dict]] = mapped_column(JSON)               # AI draft: criteria + tips
     approved_by_teacher: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     task: Mapped["WritingTask"] = relationship("WritingTask")
 
@@ -403,7 +414,7 @@ class WritingComment(Base):
     quote: Mapped[str] = mapped_column(Text, nullable=False)        # the highlighted text
     comment: Mapped[str] = mapped_column(Text, nullable=False)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class SpeakingSubmission(Base):
@@ -419,7 +430,7 @@ class SpeakingSubmission(Base):
     ai_result: Mapped[Optional[dict]] = mapped_column(JSON)               # AI draft: criteria + tips
     approved_by_teacher: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     task: Mapped["SpeakingTask"] = relationship("SpeakingTask")
 
@@ -441,7 +452,7 @@ class ErrorTag(Base):
     skill: Mapped[Optional[str]] = mapped_column(String(20))
     question_type: Mapped[Optional[str]] = mapped_column(String(20))
     sub_skill: Mapped[Optional[str]] = mapped_column(String(50))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 # -------------------- LEARNING LOOP (IELTS) --------------------
@@ -454,7 +465,7 @@ class PracticeSession(Base):
     sub_skill: Mapped[str] = mapped_column(String(50), nullable=False)
     total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     correct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class ReviewQueue(Base):
@@ -467,9 +478,9 @@ class ReviewQueue(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
-    due_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    due_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class ReviewHistory(Base):
@@ -479,4 +490,4 @@ class ReviewHistory(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
     correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

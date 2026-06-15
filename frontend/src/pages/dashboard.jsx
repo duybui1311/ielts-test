@@ -16,8 +16,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { apiFetch } from "../api";
-import { PageHeader, StatCard, AiBadge, bandColor, chartTheme } from "../component/ui";
+import { StatCard, AiBadge, bandColor, chartTheme } from "../component/ui";
 import Heatmap from "../component/Heatmap";
 
 const PRACTICE = [
@@ -107,15 +108,60 @@ export default function Dashboard() {
 
   return (
     <Box>
-      <PageHeader
-        title={`${greeting()}${name ? `, ${name.split(" ")[0]}` : ""}`}
-        subtitle="Here's how your IELTS practice is going."
-        action={
-          <Button variant="contained" onClick={() => navigate("/exams")}>
-            Take a test
-          </Button>
-        }
-      />
+      {/* Hero greeting banner */}
+      <Card
+        component={motion.div}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        sx={(t) => ({
+          position: "relative",
+          overflow: "hidden",
+          mb: 3,
+          p: { xs: 3, md: 4 },
+          color: "#fff",
+          border: "none",
+          background: t.gradients.hero,
+          backgroundSize: "200% 200%",
+          animation: "appGradientShift 16s ease infinite",
+        })}
+      >
+        <Box sx={{ position: "absolute", top: -90, right: -60, width: 280, height: 280, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 70%)" }} />
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          sx={{ position: "relative" }}
+        >
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="overline" sx={{ opacity: 0.85 }}>Your dashboard</Typography>
+            <Typography variant="h3" fontWeight={800} sx={{ lineHeight: 1.05 }}>
+              {greeting()}{name ? `, ${name.split(" ")[0]}` : ""}
+            </Typography>
+            <Typography sx={{ opacity: 0.9, mt: 0.5 }}>
+              Here's how your IELTS practice is going.
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            {kpis.avg_band != null && (
+              <Stack alignItems="center" sx={{ px: 2, py: 1.25, borderRadius: 3,
+                bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(6px)" }}>
+                <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1 }}>{kpis.avg_band}</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.85 }}>avg band</Typography>
+              </Stack>
+            )}
+            <Button
+              variant="contained"
+              onClick={() => navigate("/exams")}
+              sx={{ bgcolor: "#fff", color: "primary.main", background: "#fff",
+                "&:hover": { background: "#fff", filter: "brightness(0.96)", transform: "translateY(-1px)" } }}
+            >
+              Take a test
+            </Button>
+          </Stack>
+        </Stack>
+      </Card>
 
       {/* KPI row */}
       <Box
@@ -130,25 +176,29 @@ export default function Dashboard() {
           icon={<FactCheckRoundedIcon />}
           label="Tests taken"
           value={kpis.tests_taken}
-          color="primary.main"
+          gradient={theme.gradients.brand}
+          delay={40}
         />
         <StatCard
           icon={<EmojiEventsRoundedIcon />}
           label="Average band"
           value={kpis.avg_band ?? "—"}
-          color="success.main"
+          gradient={theme.gradients.emerald}
+          delay={120}
         />
         <StatCard
           icon={<QuizRoundedIcon />}
           label="Questions answered"
           value={kpis.questions_answered}
-          color="secondary.main"
+          gradient={theme.gradients.ocean}
+          delay={200}
         />
         <StatCard
           icon={<ReportProblemRoundedIcon />}
           label="Top weakness"
           value={kpis.top_weakness ? kpis.top_weakness.replace(/_/g, " ") : "—"}
-          color="warning.main"
+          gradient={theme.gradients.sunset}
+          delay={280}
         />
       </Box>
 

@@ -36,14 +36,28 @@ code has been removed and remaining work targets IELTS only.
 - `backend/service/storage.py` — uploads bytes to Supabase Storage and returns the
   public URL. Buckets: `writing-charts` (Task 1 images), `speaking-audio`. Needs
   `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (service key is server-side only).
-- `frontend/src/App.jsx` — routes. Pages: `ExamList`, `ExamTake`, `ExamResults`,
-  `dashboard`, `teacherDashboard`, `CreateNewExam`, `Writing`, `Speaking`,
-  `Review`, `flashcard`, `History`, `Settings`, `Help`, `login`, plus the shared
-  `navbar`.
+- `frontend/src/App.jsx` — routes. Every page is **code-split with `React.lazy`**
+  behind a `<Suspense>` fallback, so the initial bundle only ships the app shell
+  (recharts and per-page code load on demand). Pages: `ExamList`, `ExamTake`,
+  `ExamResults`, `dashboard`, `teacherDashboard`, `CreateNewExam`, `Writing`,
+  `Speaking`, `Review`, `flashcard`, `History`, `Settings`, `Help`, `login`, plus
+  the shared `navbar`.
+- `frontend/src/auth.js` — client session helpers (`setAuthed`, `logout`,
+  `getRole`, `isAuthed`, `landingFor`). Kept separate from the (lazy) Login page
+  so any module can import them synchronously. `login.jsx` re-exports them for
+  back-compat. JWT/token + `apiFetch` live in `frontend/src/api.js`.
+- `frontend/src/theme/index.js` — `createAppTheme(mode)`. Beyond the MUI palette
+  it exposes custom tokens read across pages: `theme.gradients`
+  (`brand`/`hero`/`ocean`/`sunset`/`emerald`/`mesh`), `theme.glass`,
+  `theme.customShadows` (`card`/`hover`/`glow`/`brandButton`) and `theme.brandStops`.
+  The signature look is an indigo→violet→fuchsia brand gradient with a faint
+  fixed background mesh; contained-primary buttons use it.
 - `frontend/src/component/ui.jsx` — shared presentational helpers (`PageHeader`,
-  `StatCard`, `SkillChip`, `bandColor`) and `chartTheme(theme)`, which returns
-  themed Recharts props (axis ticks/lines, grid, tooltip) so every chart stays
-  readable in both light and dark mode.
+  `StatCard`, `SkillChip`, `AiBadge`, `BandPill`, `GradientText`, `AnimatedNumber`,
+  `SectionHeading`, `bandColor`, `skillHex`/`skillGradient`) and `chartTheme(theme)`,
+  which returns themed Recharts props (axis ticks/lines, grid, tooltip) so every
+  chart stays readable in both light and dark mode. Kept framer-motion-free so it
+  stays in the light shell; richer motion lives in the lazy pages.
 
 ## Core flows
 - **Test import/export** — `POST /api/tests/import`, `GET /api/tests/{id}/export`.

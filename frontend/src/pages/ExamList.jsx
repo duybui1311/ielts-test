@@ -1,19 +1,28 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Card, CardContent, CardActions,
-  Button, Chip, Stack, CircularProgress, Alert, Tabs, Tab,
+  Button, Chip, Stack, CircularProgress, Alert, Tabs, Tab, alpha,
 } from "@mui/material";
+import { motion } from "framer-motion";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import QuizIcon from "@mui/icons-material/Quiz";
 import MenuBookRoundedIcon from "@mui/icons-material/MenuBookRounded";
 import HeadphonesRoundedIcon from "@mui/icons-material/HeadphonesRounded";
 import EditNoteRoundedIcon from "@mui/icons-material/EditNoteRounded";
 import MicRoundedIcon from "@mui/icons-material/MicRounded";
+import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
-import { PageHeader, SkillChip, AiBadge, skillHex } from "../component/ui";
+import { PageHeader, SkillChip, AiBadge, skillHex, skillGradient } from "../component/ui";
 import Writing from "./Writing";
 import Speaking from "./Speaking";
+
+const SKILL_ICON = {
+  reading: <MenuBookRoundedIcon />,
+  listening: <HeadphonesRoundedIcon />,
+  writing: <EditNoteRoundedIcon />,
+  speaking: <MicRoundedIcon />,
+};
 
 const TABS = [
   { key: "reading", label: "Reading", icon: <MenuBookRoundedIcon /> },
@@ -22,12 +31,91 @@ const TABS = [
   { key: "speaking", label: "Speaking", icon: <MicRoundedIcon />, ai: true },
 ];
 
+function ExamCard({ exam, skill, starting, onStart, index = 0 }) {
+  const hex = skillHex(skill);
+  return (
+    <Card
+      component={motion.div}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+      sx={(t) => ({
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        overflow: "hidden",
+        pt: 0.5,
+        // gradient accent strip on top
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0, left: 0, right: 0, height: 5,
+          background: skillGradient(skill),
+        },
+        "&:hover": {
+          transform: "translateY(-5px)",
+          boxShadow: t.customShadows.hover,
+          borderColor: alpha(hex, 0.45),
+        },
+      })}
+    >
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ mb: 1.5 }}>
+          <Box
+            sx={{
+              width: 44, height: 44, borderRadius: 2.5, flexShrink: 0,
+              display: "grid", placeItems: "center", color: "#fff",
+              background: skillGradient(skill),
+              boxShadow: `0 6px 16px ${alpha(hex, 0.4)}`,
+            }}
+          >
+            {SKILL_ICON[skill] || <MenuBookRoundedIcon />}
+          </Box>
+          <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.25 }}>
+            {exam.name}
+          </Typography>
+        </Stack>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
+          {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
+          <Chip label={exam.difficulty} size="small" variant="outlined" sx={{ textTransform: "capitalize" }} />
+        </Stack>
+
+        <Stack direction="row" spacing={2}>
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <AccessTimeIcon fontSize="small" color="action" />
+            <Typography variant="body2" color="text.secondary">{exam.time_limit_min} min</Typography>
+          </Stack>
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <QuizIcon fontSize="small" color="action" />
+            <Typography variant="body2" color="text.secondary">{exam.total_questions} questions</Typography>
+          </Stack>
+        </Stack>
+      </CardContent>
+      <CardActions sx={{ px: 2, pb: 2 }}>
+        <Button variant="contained" fullWidth disabled={starting === exam.id} onClick={() => onStart(exam.id)}>
+          {starting === exam.id ? "Starting…" : "Start Test"}
+        </Button>
+      </CardActions>
+    </Card>
+  );
+}
+
 function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, heading = null }) {
   const list = exams.filter((e) => ((e.skills && e.skills[0]) || "reading") === skill);
   if (list.length === 0) {
     if (hideWhenEmpty) return null;
     return (
-      <Card variant="outlined" sx={{ p: 4, textAlign: "center", bgcolor: "transparent" }}>
+      <Card variant="outlined" sx={{ p: 5, textAlign: "center", bgcolor: "transparent" }}>
+        <Box
+          sx={(t) => ({
+            width: 56, height: 56, borderRadius: 3, mx: "auto", mb: 1.5,
+            display: "grid", placeItems: "center", color: skillHex(skill),
+            bgcolor: alpha(skillHex(skill), t.palette.mode === "dark" ? 0.2 : 0.1),
+          })}
+        >
+          {SKILL_ICON[skill]}
+        </Box>
         <Typography color="text.secondary">No {skill} tests yet.</Typography>
       </Card>
     );
@@ -36,40 +124,9 @@ function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, head
     <Box sx={{ mb: heading ? 3 : 0 }}>
       {heading && <Typography variant="subtitle1" sx={{ mb: 1.5 }}>{heading}</Typography>}
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 2 }}>
-      {list.map((exam) => (
-        <Card
-          key={exam.id}
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            borderLeft: `4px solid ${skillHex(skill)}`,
-            "&:hover": { transform: "translateY(-4px)", boxShadow: (t) => t.palette.mode === "dark" ? "0 8px 20px rgba(0,0,0,0.55), 0 22px 48px rgba(0,0,0,0.6)" : "0 6px 16px rgba(79,70,229,0.10), 0 18px 40px rgba(16,24,40,0.12)" },
-          }}
-        >
-          <CardContent sx={{ flexGrow: 1 }}>
-            <Typography variant="h6" fontWeight={700} gutterBottom>{exam.name}</Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
-              {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
-              <Chip label={exam.difficulty} size="small" variant="outlined" sx={{ textTransform: "capitalize" }} />
-            </Stack>
-            <Stack direction="row" spacing={2}>
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <AccessTimeIcon fontSize="small" color="action" />
-                <Typography variant="body2" color="text.secondary">{exam.time_limit_min} min</Typography>
-              </Stack>
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <QuizIcon fontSize="small" color="action" />
-                <Typography variant="body2" color="text.secondary">{exam.total_questions} questions</Typography>
-              </Stack>
-            </Stack>
-          </CardContent>
-          <CardActions sx={{ px: 2, pb: 2 }}>
-            <Button variant="contained" fullWidth disabled={starting === exam.id} onClick={() => onStart(exam.id)}>
-              {starting === exam.id ? "Starting…" : "Start Test"}
-            </Button>
-          </CardActions>
-        </Card>
-      ))}
+        {list.map((exam, i) => (
+          <ExamCard key={exam.id} exam={exam} skill={skill} starting={starting} onStart={onStart} index={i} />
+        ))}
       </Box>
     </Box>
   );
@@ -117,7 +174,12 @@ export default function ExamList() {
 
   return (
     <Box>
-      <PageHeader title="My Tests" subtitle="Practise one skill at a time — choose a tab below." />
+      <PageHeader
+        eyebrow="Practice"
+        title="My Tests"
+        subtitle="Practise one skill at a time — choose a tab below."
+        icon={<SchoolRoundedIcon />}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 

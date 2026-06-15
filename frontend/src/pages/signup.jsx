@@ -11,7 +11,7 @@ import EmailRounded from "@mui/icons-material/EmailRounded";
 import BadgeRounded from "@mui/icons-material/BadgeRounded";
 import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
 import { useNavigate } from "react-router-dom";
-import { setAuthed, landingFor } from "./login";
+import { setAuthed, landingFor } from "../auth";
 
 // Relative by default so the Vite dev proxy (/api -> backend) and production
 // both work without a hardcoded host.
