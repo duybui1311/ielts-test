@@ -1,70 +1,48 @@
-# Getting Started with Create React App
+# Frontend (React + Vite)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The IELTS Platform web client: **React 19 + Vite**, **MUI** for components,
+**Recharts** for charts and **Framer Motion** for motion. For the full product
+overview, setup and usage, see the [root README](../README.md).
 
-## Available Scripts
+## Scripts
 
-In the project directory, you can run:
+Run these from the `frontend/` directory:
 
-### `npm start`
+| Command           | What it does                                                        |
+|-------------------|---------------------------------------------------------------------|
+| `npm install`     | Install dependencies.                                               |
+| `npm run dev`     | Start the dev server at http://localhost:3000 (HMR).                |
+| `npm run dev -- --host` | Same, but reachable from other devices on your network (phone/tablet testing). |
+| `npm run build`   | Production build to `dist/`.                                         |
+| `npm run preview` | Serve the production build locally to sanity-check it.              |
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Talking to the backend
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+The dev server proxies `/api` to `http://localhost:8000` (see `vite.config.js`),
+so just start the backend (`uvicorn backend.main:app --reload --port 8000`) and
+the frontend works with no extra config. To point at a different API, set
+`VITE_API_URL` in a `.env` file.
 
-### `npm test`
+## Project layout
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```
+src/
+  App.jsx                 Routes + the responsive app shell (side rail / mobile dock)
+  api.js                  fetch wrapper that attaches the JWT and handles 401s
+  auth.js                 client session helpers (role, token, isAuthed)
+  theme/                  MUI theme — palette, gradients, light/dark mode
+  component/              shared UI (navbar, TopBar, PageHeader, StatCard, charts…)
+  pages/                  one file per route (ExamTake, Writing, Speaking, Admin…)
+```
 
-### `npm run build`
+Every page is **code-split with `React.lazy`**, so the initial bundle only ships
+the app shell. Theme tokens (palette, gradients, shadows) live in
+`src/theme/index.js`; reusable presentational helpers live in
+`src/component/ui.jsx`.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Notes
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- **Responsive:** a collapsible side rail on desktop (≥1200px) and a bottom
+  navigation dock + slide-in drawer on phone/tablet.
+- **Light/dark mode** is toggled in the top bar and persisted per device.
+- See [`../CLAUDE.md`](../CLAUDE.md) for the architecture and data model.
