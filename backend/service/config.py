@@ -1,7 +1,13 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load backend/.env explicitly (this file lives in backend/service/), so config
+# resolves the same way no matter the current working directory or how the app
+# is launched (uvicorn from the repo root, pytest, a one-off script, etc.).
+# A real environment variable still wins — load_dotenv does not override it.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv()  # fall back to a .env discovered from the CWD, if any
 
 
 class Settings:
