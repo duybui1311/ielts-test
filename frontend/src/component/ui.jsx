@@ -340,18 +340,17 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", gra
           boxShadow: theme.customShadows.hover,
           borderColor: alpha(resolveColor(theme), 0.4),
         },
-        // faint accent wash in the corner
+        // Soft accent wash bleeding in from the top-right corner — kept inside
+        // the card bounds and low-opacity so it reads as a subtle background,
+        // not a floating blob.
         "&::after": {
           content: '""',
           position: "absolute",
-          top: -40,
-          right: -40,
-          width: 120,
-          height: 120,
-          borderRadius: "50%",
-          background: gradient || alpha(resolveColor(theme), 0.14),
-          opacity: 0.5,
-          filter: "blur(6px)",
+          inset: 0,
+          background: `radial-gradient(150px 150px at 100% 0%, ${alpha(
+            resolveColor(theme),
+            theme.palette.mode === "dark" ? 0.22 : 0.14
+          )}, transparent 72%)`,
           pointerEvents: "none",
         },
       })}

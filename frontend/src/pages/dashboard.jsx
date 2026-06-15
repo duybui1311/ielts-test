@@ -177,6 +177,7 @@ export default function Dashboard() {
           label="Tests taken"
           value={kpis.tests_taken}
           gradient={theme.gradients.brand}
+          color="primary.main"
           delay={40}
         />
         <StatCard
@@ -184,6 +185,7 @@ export default function Dashboard() {
           label="Average band"
           value={kpis.avg_band ?? "—"}
           gradient={theme.gradients.emerald}
+          color="success.main"
           delay={120}
         />
         <StatCard
@@ -191,6 +193,7 @@ export default function Dashboard() {
           label="Questions answered"
           value={kpis.questions_answered}
           gradient={theme.gradients.ocean}
+          color="info.main"
           delay={200}
         />
         <StatCard
@@ -198,6 +201,7 @@ export default function Dashboard() {
           label="Top weakness"
           value={kpis.top_weakness ? kpis.top_weakness.replace(/_/g, " ") : "—"}
           gradient={theme.gradients.sunset}
+          color="warning.main"
           delay={280}
         />
       </Box>
