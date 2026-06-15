@@ -68,7 +68,7 @@ export default function Writing({ embedded = false }) {
 
   return (
     <Box>
-      {!embedded && <PageHeader title="Writing" subtitle="Practise IELTS essays and get teacher feedback." />}
+      {!embedded && <PageHeader eyebrow="AI-graded" title="Writing" subtitle="Practise IELTS essays and get teacher feedback." icon={<EditNoteRoundedIcon />} />}
 
       {isTeacher() && <CreateTaskForm onCreated={loadTasks} />}
 

@@ -58,7 +58,7 @@ export default function ReviewQueue() {
   if (total === 0 || idx >= total) {
     return (
       <Box>
-        <PageHeader title="Spaced Review" subtitle="Resurface the questions you got wrong, right before you'd forget them." />
+        <PageHeader eyebrow="Spaced repetition" title="Spaced Review" subtitle="Resurface the questions you got wrong, right before you'd forget them." icon={<ReplayRoundedIcon />} />
         <Card sx={{ p: 5, textAlign: "center" }}>
           <CheckCircleRoundedIcon color="success" sx={{ fontSize: 48, mb: 1 }} />
           <Typography variant="h6" gutterBottom>
@@ -101,8 +101,10 @@ export default function ReviewQueue() {
   return (
     <Box>
       <PageHeader
+        eyebrow="Spaced repetition"
         title="Spaced Review"
         subtitle="Resurface the questions you got wrong, right before you'd forget them."
+        icon={<ReplayRoundedIcon />}
       />
 
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>

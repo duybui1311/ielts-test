@@ -3,6 +3,7 @@ import {
   Box, Card, Stack, Typography, Chip, Button, CircularProgress, Alert, Divider,
 } from "@mui/material";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import HistoryRoundedIcon from "@mui/icons-material/HistoryRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
 import { PageHeader, bandColor } from "../component/ui";
@@ -42,7 +43,7 @@ export default function History() {
 
   return (
     <Box>
-      <PageHeader title="History" subtitle="Every test you have started or completed." />
+      <PageHeader eyebrow="Activity" title="History" subtitle="Every test you have started or completed." icon={<HistoryRoundedIcon />} />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
