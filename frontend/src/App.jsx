@@ -49,7 +49,11 @@ function ReviewRoute() {
 
 function PrivateLayout() {
     const [navWidth, setNavWidth] = React.useState(72);
+    const [mobileOpen, setMobileOpen] = React.useState(false);
     const location = useLocation();
+
+    // Close the mobile nav drawer whenever the route changes.
+    React.useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
     const activeKey = React.useMemo(() => {
         const p = location.pathname;
@@ -75,15 +79,26 @@ function PrivateLayout() {
 
     return (
         <>
-            <Navbar activeKey={activeKey} onWidthChange={setNavWidth} />
+            <Navbar
+                activeKey={activeKey}
+                onWidthChange={setNavWidth}
+                mobileOpen={mobileOpen}
+                onMobileClose={() => setMobileOpen(false)}
+                onMobileOpen={() => setMobileOpen(true)}
+            />
             <Box
                 component="main"
                 sx={(theme) => ({
-                    ml: `${navWidth}px`,
+                    // Desktop offsets for the fixed rail; phone/tablet use the full
+                    // width since the nav is a bottom dock + overlay drawer.
+                    ml: { xs: 0, lg: `${navWidth}px` },
                     minHeight: "100vh",
                     bgcolor: theme.palette.background.default,
                     transition: theme.transitions.create("margin-left"),
                     p: { xs: 2, md: 3 },
+                    // Clear the fixed bottom dock (and the iOS home indicator) on
+                    // phone/tablet; desktop has no dock so it keeps the normal pad.
+                    pb: { xs: "calc(76px + env(safe-area-inset-bottom))", lg: 3 },
                 })}
             >
                 <TopBar />

@@ -1,12 +1,13 @@
 import { createTheme, alpha } from "@mui/material/styles";
 
 /**
- * Bandly — bold, energetic product theme.
+ * Bandly — clean, minimal product theme.
  *
- * Signature look: an indigo→violet→fuchsia brand gradient, a warm amber accent,
- * Inter type with tight headline tracking, generous 14px radius, layered soft
- * shadows with a coloured glow on interactive surfaces, glassy sticky bars and
- * smooth micro-motion. Tuned carefully for both light and dark mode.
+ * Palette (colorhunt 0046ff-73c8d2-f5f1dc-ff9013): a vivid blue primary, a soft
+ * teal accent, a warm cream canvas and an orange call-to-action. Inter type with
+ * tight headline tracking, a generous 14px radius, restrained flat shadows and a
+ * single blue→teal brand gradient kept for hero moments only. Tuned for both
+ * light and dark mode.
  *
  * Custom tokens added to the theme object (read via `theme.gradients`,
  * `theme.glass`, `theme.customShadows`) let pages share the identity without
@@ -15,15 +16,17 @@ import { createTheme, alpha } from "@mui/material/styles";
 
 const FONT = `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
 
-// Signature brand gradient stops, reused across the app.
-const BRAND_FROM = "#6366F1"; // indigo
-const BRAND_MID = "#8B5CF6"; // violet
-const BRAND_TO = "#EC4899"; // fuchsia
+// Signature brand gradient stops, reused across the app: blue → teal.
+const BRAND_FROM = "#0046FF"; // blue
+const BRAND_MID = "#2D7BE0"; // blue/teal midpoint
+const BRAND_TO = "#73C8D2"; // teal
+const ACCENT = "#FF9013"; // orange call-to-action
 
-const SOFT_SHADOW_LIGHT = "0 1px 2px rgba(16,24,40,0.04), 0 12px 30px rgba(16,24,40,0.07)";
-const SOFT_SHADOW_DARK = "0 1px 2px rgba(0,0,0,0.5), 0 14px 34px rgba(0,0,0,0.6)";
-const HOVER_SHADOW_LIGHT = "0 10px 24px rgba(99,102,241,0.16), 0 22px 48px rgba(16,24,40,0.14)";
-const HOVER_SHADOW_DARK = "0 12px 28px rgba(99,102,241,0.28), 0 26px 56px rgba(0,0,0,0.65)";
+// Restrained, mostly-neutral shadows for a flatter, minimal feel.
+const SOFT_SHADOW_LIGHT = "0 1px 2px rgba(16,24,40,0.04), 0 6px 16px rgba(16,24,40,0.05)";
+const SOFT_SHADOW_DARK = "0 1px 2px rgba(0,0,0,0.5), 0 10px 24px rgba(0,0,0,0.5)";
+const HOVER_SHADOW_LIGHT = "0 6px 16px rgba(0,70,255,0.10), 0 14px 32px rgba(16,24,40,0.10)";
+const HOVER_SHADOW_DARK = "0 8px 20px rgba(0,70,255,0.22), 0 18px 40px rgba(0,0,0,0.6)";
 
 export function createAppTheme(mode = "light") {
   const isDark = mode === "dark";
@@ -33,27 +36,27 @@ export function createAppTheme(mode = "light") {
   const palette = isDark
     ? {
         mode: "dark",
-        primary: { main: "#818CF8", light: "#A5B4FC", dark: "#6366F1", contrastText: "#0B1020" },
-        secondary: { main: "#FBBF24", light: "#FCD34D", dark: "#F59E0B", contrastText: "#1A1206" },
+        primary: { main: "#5B8CFF", light: "#88AAFF", dark: "#0046FF", contrastText: "#06122E" },
+        secondary: { main: "#FF9F3D", light: "#FFBB6E", dark: "#E07400", contrastText: "#2A1500" },
         success: { main: "#34D399", contrastText: "#06281C" },
-        warning: { main: "#FB923C", contrastText: "#2A1206" },
+        warning: { main: "#FBBF24", contrastText: "#2A1206" },
         error: { main: "#F87171", contrastText: "#2A0A0A" },
-        info: { main: "#60A5FA" },
-        background: { default: "#080B16", paper: "#121A2B" },
+        info: { main: "#73C8D2", light: "#9BDAE1", dark: "#3FB0BD", contrastText: "#06222A" },
+        background: { default: "#0A0F1E", paper: "#121A2B" },
         divider: alpha("#E2E8F0", 0.12),
         text: { primary: "#EAF0FA", secondary: "#9AA8BE", disabled: "#62718A" },
       }
     : {
         mode: "light",
-        primary: { main: "#4F46E5", light: "#6366F1", dark: "#4338CA", contrastText: "#FFFFFF" },
-        secondary: { main: "#F59E0B", light: "#FBBF24", dark: "#D97706", contrastText: "#1A1206" },
-        success: { main: "#10B981", contrastText: "#FFFFFF" },
-        warning: { main: "#F97316", contrastText: "#FFFFFF" },
-        error: { main: "#EF4444", contrastText: "#FFFFFF" },
-        info: { main: "#3B82F6" },
-        background: { default: "#F4F5FC", paper: "#FFFFFF" },
-        divider: "#E7E9F4",
-        text: { primary: "#141B33", secondary: "#586079", disabled: "#9AA3B6" },
+        primary: { main: "#0046FF", light: "#4178FF", dark: "#0036C7", contrastText: "#FFFFFF" },
+        secondary: { main: "#FF9013", light: "#FFAA4A", dark: "#E07400", contrastText: "#3A1D00" },
+        success: { main: "#0E9E6E", contrastText: "#FFFFFF" },
+        warning: { main: "#E08600", contrastText: "#FFFFFF" },
+        error: { main: "#E5484D", contrastText: "#FFFFFF" },
+        info: { main: "#2BA8B5", light: "#73C8D2", dark: "#1E7E89", contrastText: "#FFFFFF" },
+        background: { default: "#F5F1DC", paper: "#FFFFFF" },
+        divider: "#E7E1CB",
+        text: { primary: "#16243B", secondary: "#5A6475", disabled: "#9AA3B6" },
       };
 
   // Shared gradient + surface tokens (custom theme extension).
@@ -61,15 +64,13 @@ export function createAppTheme(mode = "light") {
     brand: `linear-gradient(135deg, ${BRAND_FROM} 0%, ${BRAND_MID} 55%, ${BRAND_TO} 100%)`,
     brandSoft: `linear-gradient(135deg, ${alpha(BRAND_FROM, 0.16)} 0%, ${alpha(BRAND_TO, 0.16)} 100%)`,
     hero: isDark
-      ? `linear-gradient(150deg, #3730A3 0%, #6D28D9 50%, #9D174D 100%)`
-      : `linear-gradient(150deg, #4338CA 0%, #7C3AED 52%, #DB2777 100%)`,
-    ocean: "linear-gradient(135deg, #2563EB 0%, #06B6D4 100%)",
-    sunset: "linear-gradient(135deg, #F59E0B 0%, #EF4444 50%, #EC4899 100%)",
-    emerald: "linear-gradient(135deg, #059669 0%, #34D399 100%)",
-    // Faint radial mesh painted behind the whole app for depth.
-    mesh: isDark
-      ? "radial-gradient(900px 500px at 12% -8%, rgba(99,102,241,0.18), transparent 60%), radial-gradient(800px 480px at 100% 0%, rgba(236,72,153,0.12), transparent 55%)"
-      : "radial-gradient(900px 520px at 10% -10%, rgba(99,102,241,0.10), transparent 60%), radial-gradient(820px 480px at 100% 0%, rgba(236,72,153,0.07), transparent 55%)",
+      ? `linear-gradient(150deg, #00257A 0%, #0B3FB0 50%, #2C7E8C 100%)`
+      : `linear-gradient(150deg, #0046FF 0%, #1E6FD8 50%, #73C8D2 100%)`,
+    ocean: `linear-gradient(135deg, ${BRAND_FROM} 0%, ${BRAND_TO} 100%)`,
+    sunset: `linear-gradient(135deg, ${ACCENT} 0%, #FFB347 100%)`,
+    emerald: "linear-gradient(135deg, #0E9E6E 0%, #34D399 100%)",
+    // Minimal look: no painted background mesh — the app sits on a flat canvas.
+    mesh: "none",
   };
 
   const glass = {

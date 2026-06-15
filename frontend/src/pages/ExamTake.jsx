@@ -324,13 +324,14 @@ export default function ExamTake() {
         sx={{
           p: 2, mb: 3,
           display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexWrap: "wrap", gap: 1,
           position: "sticky", top: TOPBAR_HEIGHT, zIndex: 5, bgcolor: "background.paper",
         }}
       >
-        <Typography variant="h6" fontWeight={600} noWrap sx={{ maxWidth: "60%" }}>
+        <Typography variant="h6" fontWeight={600} noWrap sx={{ maxWidth: { xs: "100%", sm: "60%" } }}>
           {examData?.exam_name}
         </Typography>
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction="row" spacing={{ xs: 1, sm: 2 }} alignItems="center" sx={{ flexWrap: "wrap" }}>
           {saveState !== "idle" && (
             <Tooltip title={saveState === "error" ? "Couldn't save — check your connection" : "Your answers are saved automatically"}>
               <Chip

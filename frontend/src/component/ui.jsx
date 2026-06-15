@@ -14,22 +14,23 @@ export const SKILL_COLOR = {
   speaking: "warning",
 };
 
-// Explicit, distinctive per-skill hues: reading=blue, listening=green,
-// writing=purple, speaking=orange. Used for chips and card accents so the
+// Explicit, distinctive per-skill hues drawn from the brand palette
+// (blue / teal / orange + a deep blue): reading=blue, listening=teal,
+// writing=deep blue, speaking=orange. Used for chips and card accents so the
 // mapping stays consistent regardless of the active palette slots.
 export const SKILL_HEX = {
-  reading: "#3B82F6",
-  listening: "#10B981",
-  writing: "#8B5CF6",
-  speaking: "#F97316",
+  reading: "#0046FF",
+  listening: "#2BA8B5",
+  writing: "#0A1F66",
+  speaking: "#FF9013",
 };
 
 // Per-skill gradients for accent bars / icon tiles.
 export const SKILL_GRADIENT = {
-  reading: "linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)",
-  listening: "linear-gradient(135deg, #10B981 0%, #34D399 100%)",
-  writing: "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)",
-  speaking: "linear-gradient(135deg, #F97316 0%, #F59E0B 100%)",
+  reading: "linear-gradient(135deg, #0046FF 0%, #4178FF 100%)",
+  listening: "linear-gradient(135deg, #2BA8B5 0%, #73C8D2 100%)",
+  writing: "linear-gradient(135deg, #0A1F66 0%, #0046FF 100%)",
+  speaking: "linear-gradient(135deg, #FF9013 0%, #FFB347 100%)",
 };
 
 export function skillHex(skill) {
@@ -168,7 +169,7 @@ export function AiBadge({ label = "AI", size = "small", sx, ...rest }) {
           letterSpacing: "0.02em",
           color: "#fff",
           border: "none",
-          background: "linear-gradient(135deg, #6366F1 0%, #A855F7 100%)",
+          background: "linear-gradient(135deg, #0046FF 0%, #2BA8B5 100%)",
           "& .MuiChip-icon": { color: "#fff", ml: 0.5 },
         },
         ...(Array.isArray(sx) ? sx : [sx]),
@@ -313,6 +314,14 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", gra
   const resolveColor = (theme) =>
     color.includes(".") ? theme.palette[color.split(".")[0]][color.split(".")[1] || "main"] : color;
 
+  // ReactBits-style spotlight: a soft radial glow follows the pointer.
+  const [spot, setSpot] = React.useState({ x: -300, y: -300, on: false });
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setSpot({ x: e.clientX - r.left, y: e.clientY - r.top, on: true });
+  };
+  const onLeave = () => setSpot((s) => ({ ...s, on: false }));
+
   // Numeric values get the big count-up; long text values (e.g. a weakness
   // label) render smaller and wrap to two lines instead of truncating.
   const isNum = Number.isFinite(typeof value === "number" ? value : Number(value));
@@ -327,6 +336,8 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", gra
   return (
     <Card
       onClick={onClick}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
       sx={(theme) => ({
         p: 2.5,
         height: "100%",
@@ -355,6 +366,22 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", gra
         },
       })}
     >
+      {/* Pointer-following spotlight (desktop hover). */}
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          borderRadius: "inherit",
+          opacity: spot.on ? 1 : 0,
+          transition: "opacity .25s ease",
+          background: `radial-gradient(220px circle at ${spot.x}px ${spot.y}px, ${alpha(
+            resolveColor(theme),
+            theme.palette.mode === "dark" ? 0.26 : 0.18
+          )}, transparent 60%)`,
+        })}
+      />
       <Stack direction="row" spacing={2} alignItems="center" sx={{ position: "relative" }}>
         <Box
           sx={(theme) => ({

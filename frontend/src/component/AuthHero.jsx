@@ -11,10 +11,10 @@ import BoltRounded from "@mui/icons-material/BoltRounded";
 const MotionBox = motion.create(Box);
 
 const SKILLS = [
-  { icon: <MenuBookRounded />, label: "Reading", grad: "linear-gradient(135deg,#3B82F6,#06B6D4)" },
-  { icon: <HeadphonesRounded />, label: "Listening", grad: "linear-gradient(135deg,#10B981,#34D399)" },
-  { icon: <EditNoteRounded />, label: "Writing", grad: "linear-gradient(135deg,#8B5CF6,#EC4899)" },
-  { icon: <MicRounded />, label: "Speaking", grad: "linear-gradient(135deg,#F97316,#F59E0B)" },
+  { icon: <MenuBookRounded />, label: "Reading", grad: "linear-gradient(135deg,#0046FF,#4178FF)" },
+  { icon: <HeadphonesRounded />, label: "Listening", grad: "linear-gradient(135deg,#2BA8B5,#73C8D2)" },
+  { icon: <EditNoteRounded />, label: "Writing", grad: "linear-gradient(135deg,#0A1F66,#0046FF)" },
+  { icon: <MicRounded />, label: "Speaking", grad: "linear-gradient(135deg,#FF9013,#FFB347)" },
 ];
 
 /**
@@ -40,10 +40,10 @@ export default function AuthHero({ headline, sub }) {
       })}
     >
       <Box sx={{ position: "absolute", top: -110, right: -90, width: 360, height: 360, borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(251,191,36,0.45) 0%, rgba(251,191,36,0) 70%)",
+        background: "radial-gradient(circle, rgba(255,144,19,0.38) 0%, rgba(255,144,19,0) 70%)",
         animation: "appPulseGlow 9s ease-in-out infinite" }} />
       <Box sx={{ position: "absolute", bottom: -120, left: -80, width: 320, height: 320, borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(56,189,248,0.4) 0%, rgba(56,189,248,0) 70%)",
+        background: "radial-gradient(circle, rgba(115,200,210,0.40) 0%, rgba(115,200,210,0) 70%)",
         animation: "appPulseGlow 11s ease-in-out infinite 1s" }} />
 
       <MotionBox initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} sx={{ position: "relative" }}>
@@ -63,7 +63,7 @@ export default function AuthHero({ headline, sub }) {
           <Typography variant="overline" sx={{ opacity: 0.92 }}>AI-powered IELTS preparation</Typography>
         </Stack>
         <Typography variant="h2" fontWeight={800} sx={{ maxWidth: 520, lineHeight: 1.05 }}>
-          {headline || (<>Practice. Auto-grade.{" "}<Box component="span" sx={{ color: "#FCD34D" }}>Improve.</Box></>)}
+          {headline || (<>Practice. Auto-grade.{" "}<Box component="span" sx={{ color: "#FF9013" }}>Improve.</Box></>)}
         </Typography>
         <Typography sx={{ maxWidth: 480, opacity: 0.92, mt: 2, fontSize: "1.05rem" }}>
           {sub || "Realistic tests across all four skills, instant band scores, AI feedback on Writing & Speaking, and a clear map of what to work on next."}
