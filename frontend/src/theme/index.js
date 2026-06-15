@@ -248,6 +248,21 @@ export function createAppTheme(mode = "light") {
       MuiAvatar: {
         styleOverrides: { root: { fontWeight: 700 } },
       },
+      MuiSnackbar: {
+        styleOverrides: {
+          // Keep bottom-anchored toasts clear of the mobile bottom nav dock
+          // (shown below the lg breakpoint).
+          anchorOriginBottomCenter: {
+            "@media (max-width:1199.95px)": { bottom: "calc(74px + env(safe-area-inset-bottom))" },
+          },
+          anchorOriginBottomLeft: {
+            "@media (max-width:1199.95px)": { bottom: "calc(74px + env(safe-area-inset-bottom))" },
+          },
+          anchorOriginBottomRight: {
+            "@media (max-width:1199.95px)": { bottom: "calc(74px + env(safe-area-inset-bottom))" },
+          },
+        },
+      },
     },
   });
 }

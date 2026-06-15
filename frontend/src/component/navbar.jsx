@@ -351,9 +351,12 @@ export default function Navbar({
                         display: "flex",
                         alignItems: "stretch",
                         borderTop: `1px solid ${theme.palette.divider}`,
-                        bgcolor: alpha(theme.palette.background.paper, 0.92),
-                        backdropFilter: "blur(10px)",
+                        // Fully opaque so scrolled content never shows through the bar.
+                        bgcolor: theme.palette.background.paper,
                         backgroundImage: "none",
+                        boxShadow: theme.palette.mode === "dark"
+                            ? "0 -2px 16px rgba(0,0,0,0.5)"
+                            : "0 -2px 16px rgba(16,24,40,0.08)",
                         pb: "env(safe-area-inset-bottom)",
                     })}
                 >

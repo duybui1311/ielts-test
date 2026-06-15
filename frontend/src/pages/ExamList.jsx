@@ -137,7 +137,16 @@ export default function ExamList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(null);
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState(() => {
+    try {
+      const saved = parseInt(localStorage.getItem("ielts-exam-tab"), 10);
+      return Number.isInteger(saved) && saved >= 0 && saved < TABS.length ? saved : 0;
+    } catch { return 0; }
+  });
+  const changeTab = (_, v) => {
+    setTab(v);
+    try { localStorage.setItem("ielts-exam-tab", String(v)); } catch { /* ignore */ }
+  };
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -185,7 +194,7 @@ export default function ExamList() {
 
       <Tabs
         value={tab}
-        onChange={(_, v) => setTab(v)}
+        onChange={changeTab}
         variant="scrollable"
         scrollButtons="auto"
         sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
