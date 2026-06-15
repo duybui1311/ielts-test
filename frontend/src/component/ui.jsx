@@ -2,7 +2,9 @@ import * as React from "react";
 import { Box, Card, Chip, Stack, Typography, alpha } from "@mui/material";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 
-/** Shared presentational helpers for the IELTS Platform look. */
+/** Shared presentational helpers for the Bandly look.
+ *  Kept framer-motion-free on purpose so it stays in the light app shell —
+ *  richer motion lives in the lazy-loaded pages (login, dashboards). */
 
 // MUI palette slot per skill (kept for back-compat with older call sites).
 export const SKILL_COLOR = {
@@ -22,8 +24,20 @@ export const SKILL_HEX = {
   speaking: "#F97316",
 };
 
+// Per-skill gradients for accent bars / icon tiles.
+export const SKILL_GRADIENT = {
+  reading: "linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)",
+  listening: "linear-gradient(135deg, #10B981 0%, #34D399 100%)",
+  writing: "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)",
+  speaking: "linear-gradient(135deg, #F97316 0%, #F59E0B 100%)",
+};
+
 export function skillHex(skill) {
   return SKILL_HEX[String(skill || "").toLowerCase()] || "#64748B";
+}
+
+export function skillGradient(skill) {
+  return SKILL_GRADIENT[String(skill || "").toLowerCase()] || "linear-gradient(135deg, #64748B 0%, #94A3B8 100%)";
 }
 
 export function bandColor(band) {
@@ -49,14 +63,75 @@ export function chartTheme(theme) {
       contentStyle: {
         background: theme.palette.background.paper,
         border: `1px solid ${theme.palette.divider}`,
-        borderRadius: 10,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+        borderRadius: 12,
+        boxShadow: "0 10px 28px rgba(0,0,0,0.16)",
         color: textPrimary,
       },
-      labelStyle: { color: textPrimary, fontWeight: 600 },
+      labelStyle: { color: textPrimary, fontWeight: 700 },
       itemStyle: { color: textPrimary },
     },
   };
+}
+
+/** Headline text painted with the brand (or a custom) gradient. */
+export function GradientText({ children, gradient, component = "span", sx, ...rest }) {
+  return (
+    <Box
+      component={component}
+      sx={[
+        (theme) => ({
+          display: "inline",
+          background: gradient || theme.gradients.brand,
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          color: "transparent",
+        }),
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
+      {...rest}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/**
+ * Count-up number. Animates from 0 to `value` once on mount; renders the raw
+ * value unchanged when it isn't a finite number (e.g. "3 / 3") or when the user
+ * prefers reduced motion.
+ */
+export function AnimatedNumber({ value, duration = 900, decimals, prefix = "", suffix = "" }) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  const isNum = Number.isFinite(numeric);
+  const dp = decimals != null ? decimals : Number.isInteger(numeric) ? 0 : 1;
+  const [display, setDisplay] = React.useState(isNum ? 0 : value);
+
+  React.useEffect(() => {
+    if (!isNum) {
+      setDisplay(value);
+      return;
+    }
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setDisplay(numeric);
+      return;
+    }
+    let raf;
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      setDisplay(numeric * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else setDisplay(numeric);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [numeric, isNum, duration, value]);
+
+  const text = isNum ? Number(display).toFixed(dp) : display;
+  return <>{prefix}{text}{suffix}</>;
 }
 
 /** Skill chip with a soft tinted background in the skill's signature colour. */
@@ -89,7 +164,7 @@ export function AiBadge({ label = "AI", size = "small", sx, ...rest }) {
       sx={[
         {
           height: 22,
-          fontWeight: 700,
+          fontWeight: 800,
           letterSpacing: "0.02em",
           color: "#fff",
           border: "none",
@@ -132,7 +207,7 @@ export function BandPill({ band, label = "Band", sx }) {
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.85 }}>
+      <Typography variant="caption" sx={{ fontWeight: 700, opacity: 0.85 }}>
         {label}
       </Typography>
       <Typography variant="subtitle2" sx={{ fontWeight: 800, lineHeight: 1 }}>
@@ -142,13 +217,13 @@ export function BandPill({ band, label = "Band", sx }) {
   );
 }
 
-/** Wraps children in a subtle fade-in-up entrance animation. */
+/** Wraps children in a subtle fade-in-up entrance animation (CSS, cheap). */
 export function FadeIn({ children, delay = 0, sx, ...rest }) {
   return (
     <Box
       sx={[
         {
-          animation: "appFadeInUp .45s cubic-bezier(0.22, 1, 0.36, 1) both",
+          animation: "appFadeInUp .5s cubic-bezier(0.22, 1, 0.36, 1) both",
           animationDelay: `${delay}ms`,
         },
         ...(Array.isArray(sx) ? sx : [sx]),
@@ -160,8 +235,8 @@ export function FadeIn({ children, delay = 0, sx, ...rest }) {
   );
 }
 
-/** Page title + optional subtitle and right-aligned action. */
-export function PageHeader({ title, subtitle, action }) {
+/** Page title + optional subtitle, eyebrow, leading gradient icon and action. */
+export function PageHeader({ title, subtitle, action, eyebrow, icon, gradient }) {
   return (
     <Stack
       direction={{ xs: "column", sm: "row" }}
@@ -169,7 +244,29 @@ export function PageHeader({ title, subtitle, action }) {
       spacing={2}
       sx={{ mb: 3 }}
     >
+      {icon && (
+        <Box
+          sx={(theme) => ({
+            width: 52,
+            height: 52,
+            borderRadius: 3,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: gradient || theme.gradients.brand,
+            boxShadow: theme.customShadows.brandButton,
+          })}
+        >
+          {icon}
+        </Box>
+      )}
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        {eyebrow && (
+          <Typography variant="overline" color="primary" sx={{ display: "block", mb: 0.25 }}>
+            {eyebrow}
+          </Typography>
+        )}
         <Typography variant="h4">{title}</Typography>
         {subtitle && (
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
@@ -182,41 +279,91 @@ export function PageHeader({ title, subtitle, action }) {
   );
 }
 
-/** Compact KPI card with a tinted icon tile and a gentle hover lift. */
-export function StatCard({ icon, label, value, hint, color = "primary.main", onClick }) {
+/** Smaller section divider heading used inside pages. */
+export function SectionHeading({ title, subtitle, icon, action, sx }) {
   return (
-    <Card
-      onClick={onClick}
-      sx={{
-        p: 2.5,
-        height: "100%",
-        cursor: onClick ? "pointer" : "default",
-        "&:hover": onClick ? { transform: "translateY(-3px)" } : undefined,
-      }}
-    >
-      <Stack direction="row" spacing={2} alignItems="center">
+    <Stack direction="row" alignItems="center" spacing={1.25} sx={[{ mb: 1.5 }, ...(Array.isArray(sx) ? sx : [sx])]}>
+      {icon && (
         <Box
           sx={(theme) => ({
-            width: 50,
-            height: 50,
-            borderRadius: 2.5,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color,
-            bgcolor: alpha(
-              color.includes(".")
-                ? theme.palette[color.split(".")[0]].main
-                : color,
-              theme.palette.mode === "dark" ? 0.2 : 0.12
-            ),
+            width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center",
+            color: theme.palette.primary.main,
+            bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.1),
           })}
         >
           {icon}
         </Box>
-        <Box sx={{ minWidth: 0 }}>
+      )}
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Typography variant="subtitle1" sx={{ lineHeight: 1.2 }}>{title}</Typography>
+        {subtitle && <Typography variant="caption" color="text.secondary">{subtitle}</Typography>}
+      </Box>
+      {action}
+    </Stack>
+  );
+}
+
+/**
+ * Compact KPI card: a gradient icon tile, a count-up value, and a hover lift +
+ * coloured glow. `color` (a palette path like "primary.main" or a hex) tints
+ * the tile; pass `gradient` to override with a full gradient. `trend` (+/- %)
+ * renders a small delta chip when provided.
+ */
+export function StatCard({ icon, label, value, hint, color = "primary.main", gradient, trend, onClick, delay = 0 }) {
+  const resolveColor = (theme) =>
+    color.includes(".") ? theme.palette[color.split(".")[0]][color.split(".")[1] || "main"] : color;
+
+  return (
+    <Card
+      onClick={onClick}
+      sx={(theme) => ({
+        p: 2.5,
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        cursor: onClick ? "pointer" : "default",
+        animation: "appFadeInUp .5s cubic-bezier(0.22,1,0.36,1) both",
+        animationDelay: `${delay}ms`,
+        "&:hover": {
+          transform: "translateY(-4px)",
+          boxShadow: theme.customShadows.hover,
+          borderColor: alpha(resolveColor(theme), 0.4),
+        },
+        // faint accent wash in the corner
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          top: -40,
+          right: -40,
+          width: 120,
+          height: 120,
+          borderRadius: "50%",
+          background: gradient || alpha(resolveColor(theme), 0.14),
+          opacity: 0.5,
+          filter: "blur(6px)",
+          pointerEvents: "none",
+        },
+      })}
+    >
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ position: "relative" }}>
+        <Box
+          sx={(theme) => ({
+            width: 52,
+            height: 52,
+            borderRadius: 2.5,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: gradient ? "#fff" : resolveColor(theme),
+            background: gradient || alpha(resolveColor(theme), theme.palette.mode === "dark" ? 0.2 : 0.12),
+            boxShadow: gradient ? theme.customShadows.brandButton : "none",
+          })}
+        >
+          {icon}
+        </Box>
+        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
           <Typography variant="h5" fontWeight={800} noWrap sx={{ letterSpacing: "-0.02em" }}>
-            {value}
+            <AnimatedNumber value={value} />
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
             {label}
@@ -227,6 +374,22 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", onC
             </Typography>
           )}
         </Box>
+        {trend != null && trend !== "" && (
+          <Chip
+            size="small"
+            label={trend}
+            sx={(theme) => {
+              const up = String(trend).trim().startsWith("+");
+              const c = up ? theme.palette.success.main : theme.palette.error.main;
+              return {
+                fontWeight: 800,
+                color: c,
+                bgcolor: alpha(c, theme.palette.mode === "dark" ? 0.2 : 0.12),
+                border: `1px solid ${alpha(c, 0.3)}`,
+              };
+            }}
+          />
+        )}
       </Stack>
     </Card>
   );
