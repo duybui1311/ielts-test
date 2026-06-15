@@ -255,6 +255,10 @@ export default function ExamTake() {
     // Reading & listening reference material stays pinned while the questions
     // scroll, so you can keep reading the passage / replaying audio. alignSelf
     // "start" stops the grid cell from stretching, which is what lets it stick.
+    //
+    // Only pin it from `md` up (where there's room): on phone / tablet-portrait
+    // the layout is a single column, so a tall pinned panel would cover the
+    // questions underneath. There it scrolls normally instead.
     const sticky = isReading || skill === "listening";
     const stickTop = TOPBAR_HEIGHT + 88;
     return (
@@ -262,11 +266,11 @@ export default function ExamTake() {
         variant="outlined"
         sx={{
           p: 2.5,
-          alignSelf: sticky ? "start" : "stretch",
-          position: sticky ? "sticky" : "static",
-          top: sticky ? stickTop : "auto",
-          maxHeight: sticky ? `calc(100vh - ${stickTop + 24}px)` : "none",
-          overflowY: sticky ? "auto" : "visible",
+          alignSelf: sticky ? { xs: "stretch", md: "start" } : "stretch",
+          position: sticky ? { xs: "static", md: "sticky" } : "static",
+          top: sticky ? { xs: "auto", md: stickTop } : "auto",
+          maxHeight: sticky ? { xs: "none", md: `calc(100vh - ${stickTop + 24}px)` } : "none",
+          overflowY: sticky ? { xs: "visible", md: "auto" } : "visible",
         }}
       >
         <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
