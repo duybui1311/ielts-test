@@ -4,6 +4,7 @@ import { Box, CircularProgress } from "@mui/material";
 import { ColorModeProvider } from "./theme/ColorModeContext";
 import Navbar from "./component/navbar";
 import TopBar from "./component/TopBar";
+import ScrollTopFab from "./component/ScrollTopFab";
 import { FadeIn } from "./component/ui";
 import ProtectedRoute from "./component/ProtectedRoute";
 import { getRole } from "./auth";
@@ -108,6 +109,7 @@ function PrivateLayout() {
                     </FadeIn>
                 </Suspense>
             </Box>
+            <ScrollTopFab />
         </>
     );
 }
