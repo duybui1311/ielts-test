@@ -313,6 +313,17 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", gra
   const resolveColor = (theme) =>
     color.includes(".") ? theme.palette[color.split(".")[0]][color.split(".")[1] || "main"] : color;
 
+  // Numeric values get the big count-up; long text values (e.g. a weakness
+  // label) render smaller and wrap to two lines instead of truncating.
+  const isNum = Number.isFinite(typeof value === "number" ? value : Number(value));
+  const longText = !isNum && String(value).length > 6;
+  const clamp2 = {
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  };
+
   return (
     <Card
       onClick={onClick}
@@ -362,10 +373,15 @@ export function StatCard({ icon, label, value, hint, color = "primary.main", gra
           {icon}
         </Box>
         <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-          <Typography variant="h5" fontWeight={800} noWrap sx={{ letterSpacing: "-0.02em" }}>
+          <Typography
+            variant={longText ? "subtitle1" : "h5"}
+            fontWeight={800}
+            title={longText ? String(value) : undefined}
+            sx={{ letterSpacing: "-0.02em", lineHeight: 1.2, textTransform: longText ? "capitalize" : "none", ...(longText ? clamp2 : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}
+          >
             <AnimatedNumber value={value} />
           </Typography>
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.3, ...clamp2 }}>
             {label}
           </Typography>
           {hint && (

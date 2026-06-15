@@ -1,8 +1,9 @@
 import * as React from "react";
 import {
-	Box, Paper, Stack, TextField, Button, Typography,
-	InputAdornment, IconButton, Alert,
+	Box, Stack, TextField, Button, Typography,
+	InputAdornment, IconButton, Alert, alpha,
 } from "@mui/material";
+import { motion } from "framer-motion";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
@@ -12,7 +13,9 @@ import MenuBookRounded from "@mui/icons-material/MenuBookRounded";
 import HeadphonesRounded from "@mui/icons-material/HeadphonesRounded";
 import EditNoteRounded from "@mui/icons-material/EditNoteRounded";
 import MicRounded from "@mui/icons-material/MicRounded";
+import BoltRounded from "@mui/icons-material/BoltRounded";
 import { useNavigate, useLocation } from "react-router-dom";
+import { GradientText } from "../component/ui";
 
 /* ---------- API base + URL helper ---------- */
 // Relative by default so the Vite dev proxy (/api -> backend) and production
@@ -26,9 +29,127 @@ const joinURL = (base, path) => {
 
 /* ---------- Auth helpers now live in ../auth (re-exported for compatibility) ---------- */
 import {
-	normalizeRole, setAuthed, logout, getRole, landingFor, isAuthed,
+	setAuthed, logout, getRole, landingFor, isAuthed, normalizeRole,
 } from "../auth";
 export { setAuthed, logout, getRole, landingFor };
+
+const MotionBox = motion.create(Box);
+
+const SKILLS = [
+	{ icon: <MenuBookRounded />, label: "Reading", grad: "linear-gradient(135deg,#3B82F6,#06B6D4)" },
+	{ icon: <HeadphonesRounded />, label: "Listening", grad: "linear-gradient(135deg,#10B981,#34D399)" },
+	{ icon: <EditNoteRounded />, label: "Writing", grad: "linear-gradient(135deg,#8B5CF6,#EC4899)" },
+	{ icon: <MicRounded />, label: "Speaking", grad: "linear-gradient(135deg,#F97316,#F59E0B)" },
+];
+
+/* ------------------------------ Hero panel ------------------------------ */
+
+function HeroPanel() {
+	return (
+		<Box
+			sx={(theme) => ({
+				position: "relative",
+				overflow: "hidden",
+				display: { xs: "none", md: "flex" },
+				flexDirection: "column",
+				justifyContent: "center",
+				gap: 3.5,
+				p: { md: 6, lg: 8 },
+				color: "#fff",
+				background: theme.gradients.hero,
+				backgroundSize: "200% 200%",
+				animation: "appGradientShift 14s ease infinite",
+			})}
+		>
+			{/* floating glow orbs */}
+			<Box sx={{ position: "absolute", top: -110, right: -90, width: 360, height: 360, borderRadius: "50%",
+				background: "radial-gradient(circle, rgba(251,191,36,0.45) 0%, rgba(251,191,36,0) 70%)",
+				animation: "appPulseGlow 9s ease-in-out infinite" }} />
+			<Box sx={{ position: "absolute", bottom: -120, left: -80, width: 320, height: 320, borderRadius: "50%",
+				background: "radial-gradient(circle, rgba(56,189,248,0.4) 0%, rgba(56,189,248,0) 70%)",
+				animation: "appPulseGlow 11s ease-in-out infinite 1s" }} />
+
+			<MotionBox
+				initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+				sx={{ position: "relative" }}
+			>
+				<Stack direction="row" spacing={1.5} alignItems="center">
+					<Box sx={{ width: 48, height: 48, borderRadius: 2.5, display: "grid", placeItems: "center",
+						fontWeight: 800, fontSize: 24, bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
+						backdropFilter: "blur(6px)" }}>
+						B
+					</Box>
+					<Typography variant="h5" fontWeight={800}>Bandly</Typography>
+				</Stack>
+			</MotionBox>
+
+			<MotionBox
+				initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08 }}
+				sx={{ position: "relative" }}
+			>
+				<Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+					<AutoAwesomeRounded sx={{ fontSize: 18 }} />
+					<Typography variant="overline" sx={{ opacity: 0.92 }}>
+						AI-powered IELTS preparation
+					</Typography>
+				</Stack>
+				<Typography variant="h2" fontWeight={800} sx={{ maxWidth: 520, lineHeight: 1.05 }}>
+					Practice. Auto-grade.{" "}
+					<Box component="span" sx={{ color: "#FCD34D" }}>Improve.</Box>
+				</Typography>
+				<Typography sx={{ maxWidth: 480, opacity: 0.92, mt: 2, fontSize: "1.05rem" }}>
+					Realistic tests across all four skills, instant band scores, AI feedback on
+					Writing &amp; Speaking, and a clear map of what to work on next.
+				</Typography>
+			</MotionBox>
+
+			{/* floating skill cards */}
+			<Box sx={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5, maxWidth: 460 }}>
+				{SKILLS.map((s, i) => (
+					<MotionBox
+						key={s.label}
+						initial={{ opacity: 0, y: 20 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.45, delay: 0.2 + i * 0.08 }}
+						whileHover={{ y: -5, scale: 1.02 }}
+						sx={{
+							display: "flex", alignItems: "center", gap: 1.5, p: 1.75, borderRadius: 3,
+							bgcolor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)",
+							backdropFilter: "blur(8px)", cursor: "default",
+						}}
+					>
+						<Box sx={{ width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center",
+							background: s.grad, boxShadow: "0 6px 16px rgba(0,0,0,0.25)", "& svg": { fontSize: 20 } }}>
+							{s.icon}
+						</Box>
+						<Typography fontWeight={700}>{s.label}</Typography>
+					</MotionBox>
+				))}
+			</Box>
+
+			<MotionBox
+				initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.55 }}
+				sx={{ position: "relative" }}
+			>
+				<Stack direction="row" spacing={3} sx={{ mt: 1 }}>
+					{[
+						{ icon: <BoltRounded sx={{ fontSize: 18 }} />, k: "Instant", v: "band scores" },
+						{ icon: <AutoAwesomeRounded sx={{ fontSize: 18 }} />, k: "AI-graded", v: "writing & speaking" },
+						{ icon: <MenuBookRounded sx={{ fontSize: 18 }} />, k: "All 4", v: "skills covered" },
+					].map((m) => (
+						<Stack key={m.k} spacing={0.25}>
+							<Stack direction="row" spacing={0.5} alignItems="center">
+								{m.icon}
+								<Typography fontWeight={800}>{m.k}</Typography>
+							</Stack>
+							<Typography variant="caption" sx={{ opacity: 0.85 }}>{m.v}</Typography>
+						</Stack>
+					))}
+				</Stack>
+			</MotionBox>
+		</Box>
+	);
+}
 
 /* ------------------------------ Component ------------------------------ */
 
@@ -51,8 +172,7 @@ export default function Login() {
 	const [error, setError] = React.useState("");
 
 	React.useEffect(() => {
-		const authed = localStorage.getItem("osce-auth") === "1";
-		if (authed) navigate(nextParam || landingFor(getRole()), { replace: true });
+		if (isAuthed()) navigate(nextParam || landingFor(getRole()), { replace: true });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -101,109 +221,45 @@ export default function Login() {
 			sx={{
 				minHeight: "100vh",
 				display: "grid",
-				gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+				gridTemplateColumns: { xs: "1fr", md: "1.05fr 1fr" },
 				bgcolor: "background.default",
 			}}
 		>
-			{/* Brand panel (desktop) */}
-			<Box
-				sx={{
-					position: "relative",
-					overflow: "hidden",
-					display: { xs: "none", md: "flex" },
-					flexDirection: "column",
-					justifyContent: "center",
-					gap: 3,
-					p: 8,
-					color: "#fff",
-					background: "linear-gradient(150deg, #4338CA 0%, #6D28D9 55%, #9333EA 100%)",
-					"&::after": {
-						content: '""',
-						position: "absolute",
-						top: -120, right: -120,
-						width: 360, height: 360,
-						borderRadius: "50%",
-						background: "radial-gradient(circle, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0) 70%)",
-					},
-				}}
-			>
-				<Stack direction="row" spacing={1.5} alignItems="center" sx={{ position: "relative" }}>
-					<Box
-						sx={{
-							width: 44, height: 44, borderRadius: 2,
-							display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22,
-							bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)",
-						}}
-					>
-						B
-					</Box>
-					<Typography variant="h5" fontWeight={800}>Bandly</Typography>
-				</Stack>
-				<Stack direction="row" spacing={1} alignItems="center" sx={{ position: "relative" }}>
-					<AutoAwesomeRounded sx={{ fontSize: 18 }} />
-					<Typography variant="overline" sx={{ opacity: 0.9, letterSpacing: "0.12em" }}>
-						AI-powered IELTS preparation
-					</Typography>
-				</Stack>
-				<Typography variant="h3" fontWeight={800} sx={{ maxWidth: 460, position: "relative" }}>
-					Practice. Auto-grade. Improve.
-				</Typography>
-				<Typography sx={{ maxWidth: 460, opacity: 0.92, position: "relative" }}>
-					Realistic tests across all four skills, instant band scores, AI feedback
-					on Writing &amp; Speaking, and a clear map of what to work on next.
-				</Typography>
-				<Stack direction="row" spacing={1.25} sx={{ position: "relative", flexWrap: "wrap", gap: 1 }}>
-					{[
-						{ icon: <MenuBookRounded sx={{ fontSize: 18 }} />, label: "Reading" },
-						{ icon: <HeadphonesRounded sx={{ fontSize: 18 }} />, label: "Listening" },
-						{ icon: <EditNoteRounded sx={{ fontSize: 18 }} />, label: "Writing" },
-						{ icon: <MicRounded sx={{ fontSize: 18 }} />, label: "Speaking" },
-					].map((s) => (
-						<Stack
-							key={s.label}
-							direction="row" spacing={0.75} alignItems="center"
-							sx={{ px: 1.5, py: 0.75, borderRadius: 999, bgcolor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)" }}
-						>
-							{s.icon}
-							<Typography variant="body2" fontWeight={600}>{s.label}</Typography>
-						</Stack>
-					))}
-				</Stack>
-			</Box>
+			<HeroPanel />
 
 			{/* Form panel */}
-			<Box sx={{ display: "grid", placeItems: "center", p: 3 }}>
-				<Paper
+			<Box sx={{ display: "grid", placeItems: "center", p: { xs: 3, sm: 4 } }}>
+				<MotionBox
 					component="form"
 					onSubmit={onSubmit}
-					elevation={0}
-					sx={{
-						p: 4, width: "100%", maxWidth: 400,
-						borderRadius: 3,
-						border: "1px solid",
-						borderColor: "divider",
-						boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px rgba(16,24,40,0.08)",
-						animation: "appFadeInUp .5s cubic-bezier(0.22,1,0.36,1) both",
-					}}
+					initial={{ opacity: 0, y: 18 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+					sx={(theme) => ({
+						p: { xs: 3, sm: 4 }, width: "100%", maxWidth: 420,
+						borderRadius: 4,
+						bgcolor: "background.paper",
+						border: `1px solid ${theme.palette.divider}`,
+						boxShadow: theme.customShadows.card,
+					})}
 				>
 					<Stack spacing={2.5}>
-						<Box sx={{ display: { xs: "block", md: "none" }, mb: 0.5 }}>
+						{/* mobile brand mark */}
+						<Box sx={{ display: { xs: "block", md: "none" } }}>
 							<Stack direction="row" spacing={1} alignItems="center">
-								<Box
-									sx={{
-										width: 36, height: 36, borderRadius: 1.5, color: "#fff",
-										display: "grid", placeItems: "center", fontWeight: 800,
-										background: "linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%)",
-									}}
-								>
+								<Box sx={(theme) => ({ width: 38, height: 38, borderRadius: 2, color: "#fff",
+									display: "grid", placeItems: "center", fontWeight: 800, background: theme.gradients.brand })}>
 									B
 								</Box>
 								<Typography variant="h6" fontWeight={800}>Bandly</Typography>
 							</Stack>
 						</Box>
+
 						<Box>
-							<Typography variant="h5" fontWeight={800}>Welcome back</Typography>
-							<Typography variant="body2" color="text.secondary">
+							<Typography variant="h4" fontWeight={800}>
+								Welcome <GradientText>back</GradientText>
+							</Typography>
+							<Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
 								Sign in to continue your practice.
 							</Typography>
 						</Box>
@@ -284,7 +340,7 @@ export default function Login() {
 							</Button>
 						</Typography>
 					</Stack>
-				</Paper>
+				</MotionBox>
 			</Box>
 		</Box>
 	);
