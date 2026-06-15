@@ -1,33 +1,45 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
-import { Box } from "@mui/material";
+import { Box, CircularProgress } from "@mui/material";
 import { ColorModeProvider } from "./theme/ColorModeContext";
-import Login from "./pages/login";
-import Signup from "./pages/signup";
-import Dashboard from "./pages/dashboard";
-import TeacherDashboard from "./pages/teacherDashboard";
 import Navbar from "./component/navbar";
 import TopBar from "./component/TopBar";
 import { FadeIn } from "./component/ui";
 import ProtectedRoute from "./component/ProtectedRoute";
-import CreateNewExam from "./pages/CreateNewExam";
-import FlashcardPage from "./pages/flashcard";
-import ExamList from "./pages/ExamList";
-import TestManage from "./pages/TestManage";
-import TaskEdit from "./pages/TaskEdit";
-import Admin from "./pages/Admin";
-import ExamTake from "./pages/ExamTake";
-import ExamResults from "./pages/ExamResults";
-import History from "./pages/History";
-import Settings from "./pages/Settings";
-import Help from "./pages/Help";
-import Writing from "./pages/Writing";
-import Speaking from "./pages/Speaking";
-import Review from "./pages/Review";
-import ReviewQueue from "./pages/ReviewQueue";
-import Practice from "./pages/Practice";
-import ResultView from "./pages/ResultView";
-import { getRole } from "./pages/login";
+import { getRole } from "./auth";
+
+// Every page is code-split so the initial bundle only carries the app shell.
+// Routes load on demand behind the <Suspense> fallback below.
+const Login            = lazy(() => import("./pages/login"));
+const Signup           = lazy(() => import("./pages/signup"));
+const Dashboard        = lazy(() => import("./pages/dashboard"));
+const TeacherDashboard = lazy(() => import("./pages/teacherDashboard"));
+const CreateNewExam    = lazy(() => import("./pages/CreateNewExam"));
+const FlashcardPage    = lazy(() => import("./pages/flashcard"));
+const ExamList         = lazy(() => import("./pages/ExamList"));
+const TestManage       = lazy(() => import("./pages/TestManage"));
+const TaskEdit         = lazy(() => import("./pages/TaskEdit"));
+const Admin            = lazy(() => import("./pages/Admin"));
+const ExamTake         = lazy(() => import("./pages/ExamTake"));
+const ExamResults      = lazy(() => import("./pages/ExamResults"));
+const History          = lazy(() => import("./pages/History"));
+const Settings         = lazy(() => import("./pages/Settings"));
+const Help             = lazy(() => import("./pages/Help"));
+const Writing          = lazy(() => import("./pages/Writing"));
+const Speaking         = lazy(() => import("./pages/Speaking"));
+const Review           = lazy(() => import("./pages/Review"));
+const ReviewQueue      = lazy(() => import("./pages/ReviewQueue"));
+const Practice         = lazy(() => import("./pages/Practice"));
+const ResultView       = lazy(() => import("./pages/ResultView"));
+
+// Centered fallback while a lazy route chunk loads.
+function PageLoader() {
+    return (
+        <Box sx={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+            <CircularProgress />
+        </Box>
+    );
+}
 
 // /review is the teacher grading queue for teachers/admins, and the student's
 // spaced-repetition review for students.
@@ -75,9 +87,11 @@ function PrivateLayout() {
                 })}
             >
                 <TopBar />
-                <FadeIn key={location.pathname}>
-                    <Outlet />
-                </FadeIn>
+                <Suspense fallback={<PageLoader />}>
+                    <FadeIn key={location.pathname}>
+                        <Outlet />
+                    </FadeIn>
+                </Suspense>
             </Box>
         </>
     );
@@ -87,43 +101,45 @@ export default function App() {
     return (
         <ColorModeProvider>
             <BrowserRouter>
-                <Routes>
-                    {/* Public */}
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/signup" element={<Signup />} />
+                <Suspense fallback={<PageLoader />}>
+                    <Routes>
+                        {/* Public */}
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/signup" element={<Signup />} />
 
-                    {/* Private — all share the collapsible side navbar */}
-                    <Route
-                        element={
-                            <ProtectedRoute>
-                                <PrivateLayout />
-                            </ProtectedRoute>
-                        }
-                    >
-                        <Route path="/"                    element={<Navigate to="/exams" replace />} />
-                        <Route path="/exams"               element={<ExamList />} />
-                        <Route path="/exam/:attemptId"     element={<ExamTake />} />
-                        <Route path="/results/:attemptId"  element={<ExamResults />} />
-                        <Route path="/dashboard"           element={<Dashboard />} />
-                        <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
-                        <Route path="/manage-tests"        element={<TestManage />} />
-                        <Route path="/task/:kind/:taskId"  element={<TaskEdit />} />
-                        <Route path="/admin"               element={<Admin />} />
-                        <Route path="/create-exam"         element={<CreateNewExam />} />
-                        <Route path="/writing"             element={<Writing />} />
-                        <Route path="/speaking"            element={<Speaking />} />
-                        <Route path="/practice"            element={<Practice />} />
-                        <Route path="/practice/:subSkill"  element={<Practice />} />
-                        <Route path="/result/:kind/:submissionId" element={<ResultView />} />
-                        <Route path="/review"              element={<ReviewRoute />} />
-                        <Route path="/flashcard"           element={<FlashcardPage />} />
-                        <Route path="/history"             element={<History />} />
-                        <Route path="/settings"            element={<Settings />} />
-                        <Route path="/help"                element={<Help />} />
-                    </Route>
+                        {/* Private — all share the collapsible side navbar */}
+                        <Route
+                            element={
+                                <ProtectedRoute>
+                                    <PrivateLayout />
+                                </ProtectedRoute>
+                            }
+                        >
+                            <Route path="/"                    element={<Navigate to="/exams" replace />} />
+                            <Route path="/exams"               element={<ExamList />} />
+                            <Route path="/exam/:attemptId"     element={<ExamTake />} />
+                            <Route path="/results/:attemptId"  element={<ExamResults />} />
+                            <Route path="/dashboard"           element={<Dashboard />} />
+                            <Route path="/teacher_dashboard"   element={<TeacherDashboard />} />
+                            <Route path="/manage-tests"        element={<TestManage />} />
+                            <Route path="/task/:kind/:taskId"  element={<TaskEdit />} />
+                            <Route path="/admin"               element={<Admin />} />
+                            <Route path="/create-exam"         element={<CreateNewExam />} />
+                            <Route path="/writing"             element={<Writing />} />
+                            <Route path="/speaking"            element={<Speaking />} />
+                            <Route path="/practice"            element={<Practice />} />
+                            <Route path="/practice/:subSkill"  element={<Practice />} />
+                            <Route path="/result/:kind/:submissionId" element={<ResultView />} />
+                            <Route path="/review"              element={<ReviewRoute />} />
+                            <Route path="/flashcard"           element={<FlashcardPage />} />
+                            <Route path="/history"             element={<History />} />
+                            <Route path="/settings"            element={<Settings />} />
+                            <Route path="/help"                element={<Help />} />
+                        </Route>
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                </Suspense>
             </BrowserRouter>
         </ColorModeProvider>
     );

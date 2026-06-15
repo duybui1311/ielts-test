@@ -22,7 +22,7 @@ import ReplayRoundedIcon         from "@mui/icons-material/ReplayRounded";
 import AutoAwesomeRoundedIcon    from "@mui/icons-material/AutoAwesomeRounded";
 import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
 
-import { logout } from "../pages/login";
+import { logout } from "../auth";
 
 // Placeholder brand wordmark — change `BRAND` to rebrand the whole app.
 const BRAND = "Bandly";

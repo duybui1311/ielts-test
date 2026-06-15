@@ -8,7 +8,7 @@ import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../component/ui";
 import { useColorMode } from "../theme/ColorModeContext";
-import { logout } from "./login";
+import { logout } from "../auth";
 import { apiFetch } from "../api";
 
 function readLS(key) {

@@ -24,64 +24,11 @@ const joinURL = (base, path) => {
 	return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
-/* ---------- Auth helpers (kept for Navbar compatibility) ---------- */
-function normalizeRole(r) {
-	if (!r) return null;
-	const v = String(r).toLowerCase().trim();
-	if (v === "teacher" || v === "student" || v === "admin") return v;
-	return null;
-}
-
-export function setAuthed(role, info = {}) {
-	const cleanRole = normalizeRole(role) || "student";
-	try {
-		localStorage.setItem("osce-auth", "1");
-		localStorage.setItem("osce-role", cleanRole);
-
-		if (info.userId != null) {
-			localStorage.setItem("osce-user-id", String(info.userId));
-		}
-		if (info.name) {
-			localStorage.setItem("osce-name", info.name);
-		}
-		if (info.email) {
-			localStorage.setItem("osce-email", info.email);
-		}
-		if (info.token) {
-			localStorage.setItem("osce-token", info.token);
-		}
-	} catch {
-		// ignore storage errors
-	}
-}
-
-export function logout() {
-	try {
-		localStorage.removeItem("osce-auth");
-		localStorage.removeItem("osce-role");
-		localStorage.removeItem("osce-user-id");
-		localStorage.removeItem("osce-name");
-		localStorage.removeItem("osce-email");
-		localStorage.removeItem("osce-token");
-		sessionStorage.setItem("osce-just-logged-out", "1"); // one-shot flag
-	} catch {
-		// ignore
-	}
-}
-
-export function getRole() {
-	try {
-		return normalizeRole(localStorage.getItem("osce-role")) || "student";
-	} catch {
-		return "student";
-	}
-}
-
-export function landingFor(role) {
-	if (role === "admin") return "/admin";
-	if (role === "teacher") return "/manage-tests";
-	return "/exams";
-}
+/* ---------- Auth helpers now live in ../auth (re-exported for compatibility) ---------- */
+import {
+	normalizeRole, setAuthed, logout, getRole, landingFor, isAuthed,
+} from "../auth";
+export { setAuthed, logout, getRole, landingFor };
 
 /* ------------------------------ Component ------------------------------ */
 
