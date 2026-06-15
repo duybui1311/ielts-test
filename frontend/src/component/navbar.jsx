@@ -105,22 +105,41 @@ export default function Navbar({
             : it.icon;
 
     const commonItemSx = (theme, selected) => ({
+        position: "relative",
         mb: 0.5,
         mx: 0.5,
         borderRadius: 2,
         color: selected ? theme.palette.primary.main : theme.palette.text.secondary,
+        transition: "background-color .2s ease, color .2s ease, transform .12s ease",
         "& .MuiListItemIcon-root": {
             minWidth: 0,
             mr: expanded ? 2 : "auto",
             justifyContent: "center",
             color: "inherit",
         },
+        // gradient accent bar on the active item
+        ...(selected && {
+            "&::before": {
+                content: '""',
+                position: "absolute",
+                left: 0,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 3,
+                height: 22,
+                borderRadius: 3,
+                background: theme.gradients.brand,
+            },
+        }),
         "&.Mui-selected, &.Mui-selected:hover": {
-            bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.12),
+            bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.1),
             color: theme.palette.primary.main,
             fontWeight: 600,
         },
-        "&:hover": { bgcolor: selected ? undefined : theme.palette.action.hover },
+        "&:hover": {
+            bgcolor: selected ? undefined : theme.palette.action.hover,
+            transform: "translateX(2px)",
+        },
     });
 
     return (
