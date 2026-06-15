@@ -40,8 +40,10 @@ function SkillPicker() {
   return (
     <Box>
       <PageHeader
+        eyebrow="AI practice"
         title="Practice by Type"
         subtitle="Drill a single question type with instant grading and AI explanations."
+        icon={<FitnessCenterRoundedIcon />}
       />
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(3, 1fr)" }, gap: 2 }}>
         {skills.map((s) => {

@@ -7,6 +7,7 @@ import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
+import HelpOutlineRoundedIcon from "@mui/icons-material/HelpOutlineRounded";
 import { PageHeader } from "../component/ui";
 
 const STEPS = [
@@ -25,7 +26,7 @@ const FAQ = [
 export default function Help() {
   return (
     <Box sx={{ maxWidth: 860 }}>
-      <PageHeader title="Help & getting started" subtitle="A quick tour of how the platform works." />
+      <PageHeader eyebrow="Guide" title="Help & getting started" subtitle="A quick tour of how the platform works." icon={<HelpOutlineRoundedIcon />} />
 
       <Stack
         direction={{ xs: "column", md: "row" }}

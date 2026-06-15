@@ -1,17 +1,20 @@
 import * as React from "react";
 import {
-	Box, Paper, Stack, TextField, Button, Typography,
+	Box, Stack, TextField, Button, Typography,
 	InputAdornment, IconButton, Alert,
 } from "@mui/material";
+import { motion } from "framer-motion";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import LockRounded from "@mui/icons-material/LockRounded";
 import EmailRounded from "@mui/icons-material/EmailRounded";
 import BadgeRounded from "@mui/icons-material/BadgeRounded";
-import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
 import { useNavigate } from "react-router-dom";
-import { setAuthed, landingFor } from "../auth";
+import { setAuthed, landingFor, isAuthed, getRole } from "../auth";
+import { GradientText } from "../component/ui";
+import AuthHero from "../component/AuthHero";
+
+const MotionBox = motion.create(Box);
 
 // Relative by default so the Vite dev proxy (/api -> backend) and production
 // both work without a hardcoded host.
@@ -30,9 +33,7 @@ export default function Signup() {
 	const [error, setError] = React.useState("");
 
 	React.useEffect(() => {
-		if (localStorage.getItem("osce-auth") === "1") {
-			navigate(landingFor(localStorage.getItem("osce-role") || "student"), { replace: true });
-		}
+		if (isAuthed()) navigate(landingFor(getRole()), { replace: true });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -86,76 +87,45 @@ export default function Signup() {
 			sx={{
 				minHeight: "100vh",
 				display: "grid",
-				gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+				gridTemplateColumns: { xs: "1fr", md: "1.05fr 1fr" },
 				bgcolor: "background.default",
 			}}
 		>
-			{/* Brand panel (desktop) */}
-			<Box
-				sx={{
-					position: "relative",
-					overflow: "hidden",
-					display: { xs: "none", md: "flex" },
-					flexDirection: "column",
-					justifyContent: "center",
-					gap: 3,
-					p: 8,
-					color: "#fff",
-					background: "linear-gradient(150deg, #4338CA 0%, #6D28D9 55%, #9333EA 100%)",
-					"&::after": {
-						content: '""',
-						position: "absolute",
-						bottom: -120, left: -120,
-						width: 360, height: 360,
-						borderRadius: "50%",
-						background: "radial-gradient(circle, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0) 70%)",
-					},
-				}}
-			>
-				<Stack direction="row" spacing={1.5} alignItems="center" sx={{ position: "relative" }}>
-					<Box
-						sx={{
-							width: 44, height: 44, borderRadius: 2,
-							display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22,
-							bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)",
-						}}
-					>
-						B
-					</Box>
-					<Typography variant="h5" fontWeight={800}>Bandly</Typography>
-				</Stack>
-				<Stack direction="row" spacing={1} alignItems="center" sx={{ position: "relative" }}>
-					<AutoAwesomeRounded sx={{ fontSize: 18 }} />
-					<Typography variant="overline" sx={{ opacity: 0.9, letterSpacing: "0.12em" }}>
-						AI-powered IELTS preparation
-					</Typography>
-				</Stack>
-				<Typography variant="h3" fontWeight={800} sx={{ maxWidth: 460, position: "relative" }}>
-					Create your account
-				</Typography>
-				<Typography sx={{ maxWidth: 460, opacity: 0.92, position: "relative" }}>
-					Sign up to take realistic tests across all four skills, get AI feedback on
-					Writing &amp; Speaking, and track your band scores over time.
-				</Typography>
-			</Box>
+			<AuthHero
+				headline={<>Start your <Box component="span" sx={{ color: "#FCD34D" }}>journey.</Box></>}
+				sub="Sign up to take realistic tests across all four skills, get AI feedback on Writing & Speaking, and track your band scores over time."
+			/>
 
 			{/* Form panel */}
-			<Box sx={{ display: "grid", placeItems: "center", p: 3 }}>
-				<Paper
+			<Box sx={{ display: "grid", placeItems: "center", p: { xs: 3, sm: 4 } }}>
+				<MotionBox
 					component="form"
 					onSubmit={onSubmit}
-					elevation={0}
-					sx={{
-						p: 4, width: "100%", maxWidth: 400, borderRadius: 3,
-						border: "1px solid", borderColor: "divider",
-						boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px rgba(16,24,40,0.08)",
-						animation: "appFadeInUp .5s cubic-bezier(0.22,1,0.36,1) both",
-					}}
+					initial={{ opacity: 0, y: 18 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+					sx={(theme) => ({
+						p: { xs: 3, sm: 4 }, width: "100%", maxWidth: 420, borderRadius: 4,
+						bgcolor: "background.paper",
+						border: `1px solid ${theme.palette.divider}`,
+						boxShadow: theme.customShadows.card,
+					})}
 				>
 					<Stack spacing={2.5}>
+						{/* mobile brand mark */}
+						<Box sx={{ display: { xs: "block", md: "none" } }}>
+							<Stack direction="row" spacing={1} alignItems="center">
+								<Box sx={(theme) => ({ width: 38, height: 38, borderRadius: 2, color: "#fff",
+									display: "grid", placeItems: "center", fontWeight: 800, background: theme.gradients.brand })}>
+									B
+								</Box>
+								<Typography variant="h6" fontWeight={800}>Bandly</Typography>
+							</Stack>
+						</Box>
+
 						<Box>
-							<Typography variant="h5" fontWeight={800}>Get started</Typography>
-							<Typography variant="body2" color="text.secondary">
+							<Typography variant="h4" fontWeight={800}>Get <GradientText>started</GradientText></Typography>
+							<Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
 								It only takes a moment.
 							</Typography>
 						</Box>
@@ -250,7 +220,7 @@ export default function Signup() {
 							</Button>
 						</Typography>
 					</Stack>
-				</Paper>
+				</MotionBox>
 			</Box>
 		</Box>
 	);

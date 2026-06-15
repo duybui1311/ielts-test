@@ -252,15 +252,21 @@ export default function ExamTake() {
     const hasImage = skill === "writing" && sec.image_url;
     const hasText = !!(sec.passage_md && sec.passage_md.trim());
     const isReading = skill === "reading";
+    // Reading & listening reference material stays pinned while the questions
+    // scroll, so you can keep reading the passage / replaying audio. alignSelf
+    // "start" stops the grid cell from stretching, which is what lets it stick.
+    const sticky = isReading || skill === "listening";
+    const stickTop = TOPBAR_HEIGHT + 88;
     return (
       <Paper
         variant="outlined"
         sx={{
           p: 2.5,
-          maxHeight: isReading ? 600 : "none",
-          overflowY: isReading ? "auto" : "visible",
-          position: skill === "listening" ? "sticky" : "static",
-          top: skill === "listening" ? TOPBAR_HEIGHT + 80 : "auto",
+          alignSelf: sticky ? "start" : "stretch",
+          position: sticky ? "sticky" : "static",
+          top: sticky ? stickTop : "auto",
+          maxHeight: sticky ? `calc(100vh - ${stickTop + 24}px)` : "none",
+          overflowY: sticky ? "auto" : "visible",
         }}
       >
         <Typography variant="caption" color="text.secondary" display="block" gutterBottom>

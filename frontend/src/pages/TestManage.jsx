@@ -11,6 +11,7 @@ import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddBoxRoundedIcon from "@mui/icons-material/AddBoxRounded";
 import ArrowDropDownRoundedIcon from "@mui/icons-material/ArrowDropDownRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, getUserId } from "../api";
 import { PageHeader, SkillChip } from "../component/ui";
@@ -135,8 +136,10 @@ export default function TestManage() {
   return (
     <Box>
       <PageHeader
+        eyebrow="Teacher"
         title="Test Manage"
         subtitle="Edit, rename, delete or take any test — including Writing & Speaking tasks."
+        icon={<LibraryBooksRoundedIcon />}
         action={
           <>
             <Button

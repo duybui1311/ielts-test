@@ -5,6 +5,7 @@ import {
 } from "@mui/material";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import ManageAccountsRoundedIcon from "@mui/icons-material/ManageAccountsRounded";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../component/ui";
 import { useColorMode } from "../theme/ColorModeContext";
@@ -76,7 +77,7 @@ export default function Settings() {
 
   return (
     <Box sx={{ maxWidth: 720 }}>
-      <PageHeader title="Settings" subtitle="Manage your profile, security and appearance." />
+      <PageHeader eyebrow="Account" title="Settings" subtitle="Manage your profile, security and appearance." icon={<ManageAccountsRoundedIcon />} />
 
       {/* Profile */}
       <Card sx={{ p: 3, mb: 3 }}>

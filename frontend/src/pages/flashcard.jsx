@@ -57,8 +57,10 @@ export default function FlashcardPage() {
   return (
     <Box>
       <PageHeader
+        eyebrow="Study"
         title="Flashcards"
         subtitle="Build decks and study them in flip-card mode."
+        icon={<StyleRoundedIcon />}
         action={
           <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setDeckDialog(true)}>
             New deck

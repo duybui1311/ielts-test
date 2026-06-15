@@ -12,9 +12,14 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { apiFetch } from "../api";
-import { PageHeader, StatCard, bandColor, chartTheme } from "../component/ui";
+import { StatCard, bandColor, chartTheme } from "../component/ui";
 import Heatmap from "../component/Heatmap";
+
+function readName() {
+  try { return localStorage.getItem("osce-name") || ""; } catch { return ""; }
+}
 
 const EMPTY = {
   kpis: { classes: 0, students: 0, exams: 0, to_review: 0 },
@@ -47,23 +52,58 @@ export default function TeacherDashboard() {
   const ct = chartTheme(theme);
   const hasClasses = classes.length > 0;
 
+  const firstName = readName().split(" ")[0];
+
   return (
     <Box>
-      <PageHeader
-        title="Class Dashboard"
-        subtitle="Monitor your classes, exams and recent submissions."
-        action={
-          <Button variant="contained" startIcon={<AddBoxRoundedIcon />} onClick={() => navigate("/create-exam")}>
-            Create exam
-          </Button>
-        }
-      />
+      {/* Hero greeting banner */}
+      <Card
+        component={motion.div}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        sx={(t) => ({
+          position: "relative", overflow: "hidden", mb: 3, p: { xs: 3, md: 4 }, color: "#fff",
+          border: "none", background: t.gradients.hero, backgroundSize: "200% 200%",
+          animation: "appGradientShift 16s ease infinite",
+        })}
+      >
+        <Box sx={{ position: "absolute", top: -90, right: -60, width: 280, height: 280, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 70%)" }} />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "flex-start", sm: "center" }} sx={{ position: "relative" }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="overline" sx={{ opacity: 0.85 }}>Teacher workspace</Typography>
+            <Typography variant="h3" fontWeight={800} sx={{ lineHeight: 1.05 }}>
+              Class Dashboard
+            </Typography>
+            <Typography sx={{ opacity: 0.9, mt: 0.5 }}>
+              {firstName ? `Welcome back, ${firstName}. ` : ""}Monitor your classes, exams and submissions.
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            {kpis.to_review > 0 && (
+              <Stack alignItems="center" sx={{ px: 2, py: 1.25, borderRadius: 3,
+                bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(6px)" }}>
+                <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1 }}>{kpis.to_review}</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.85 }}>to review</Typography>
+              </Stack>
+            )}
+            <Button
+              variant="contained" startIcon={<AddBoxRoundedIcon />} onClick={() => navigate("/create-exam")}
+              sx={{ bgcolor: "#fff", color: "primary.main", background: "#fff",
+                "&:hover": { background: "#fff", filter: "brightness(0.96)", transform: "translateY(-1px)" } }}
+            >
+              Create exam
+            </Button>
+          </Stack>
+        </Stack>
+      </Card>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2, mb: 3 }}>
-        <StatCard icon={<ClassRoundedIcon />} label="Classes" value={kpis.classes} color="primary.main" />
-        <StatCard icon={<GroupsRoundedIcon />} label="Students" value={kpis.students} color="secondary.main" />
-        <StatCard icon={<AssignmentRoundedIcon />} label="Exams" value={kpis.exams} color="success.main" />
-        <StatCard icon={<PendingActionsRoundedIcon />} label="To review" value={kpis.to_review} color="warning.main" />
+        <StatCard icon={<ClassRoundedIcon />} label="Classes" value={kpis.classes} gradient={theme.gradients.brand} color="primary.main" delay={40} />
+        <StatCard icon={<GroupsRoundedIcon />} label="Students" value={kpis.students} gradient={theme.gradients.ocean} color="info.main" delay={120} />
+        <StatCard icon={<AssignmentRoundedIcon />} label="Exams" value={kpis.exams} gradient={theme.gradients.emerald} color="success.main" delay={200} />
+        <StatCard icon={<PendingActionsRoundedIcon />} label="To review" value={kpis.to_review} gradient={theme.gradients.sunset} color="warning.main" delay={280} />
       </Box>
 
       {!hasClasses ? (

@@ -51,7 +51,7 @@ export default function Speaking({ embedded = false }) {
 
   return (
     <Box>
-      {!embedded && <PageHeader title="Speaking" subtitle="Record your answers and get teacher feedback." />}
+      {!embedded && <PageHeader eyebrow="AI-graded" title="Speaking" subtitle="Record your answers and get teacher feedback." icon={<MicRoundedIcon />} />}
 
       {!SR && (
         <Alert severity="info" sx={{ mb: 2 }}>

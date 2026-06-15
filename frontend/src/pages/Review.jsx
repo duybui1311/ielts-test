@@ -7,6 +7,7 @@ import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import RateReviewRoundedIcon from "@mui/icons-material/RateReviewRounded";
 import { apiFetch, mediaUrl } from "../api";
 import { PageHeader } from "../component/ui";
 import CommentedDoc from "../component/CommentedDoc";
@@ -58,8 +59,10 @@ export default function Review() {
   return (
     <Box>
       <PageHeader
+        eyebrow="Grading"
         title="Review"
         subtitle="Grade pending Writing and Speaking submissions."
+        icon={<RateReviewRoundedIcon />}
         action={
           <Button variant="outlined" startIcon={<RefreshRoundedIcon />} onClick={load}>
             Refresh
