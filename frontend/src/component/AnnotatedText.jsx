@@ -1,5 +1,5 @@
 import React from "react";
-import { Box } from "@mui/material";
+import { Box, alpha } from "@mui/material";
 
 /** Absolute character offset of (node, offset) within `container`'s text. */
 function absOffset(container, node, offset) {
@@ -68,7 +68,7 @@ export default function AnnotatedText({ text = "", comments = [], onSelect, acti
               cursor: "pointer",
               bgcolor: seg.ids.includes(activeId)
                 ? (t.palette.mode === "dark" ? "warning.dark" : "warning.light")
-                : (t.palette.mode === "dark" ? "rgba(255,193,7,0.28)" : "rgba(255,193,7,0.35)"),
+                : alpha(t.palette.warning.main, t.palette.mode === "dark" ? 0.28 : 0.32),
               borderBottom: "2px solid",
               borderColor: "warning.main",
             })}

@@ -15,6 +15,38 @@ const SR = typeof window !== "undefined"
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null;
 
+// Pick a container/codec the current browser can actually record. iOS Safari
+// only records audio/mp4 (not webm), so hardcoding webm produced a blob the
+// <audio> element couldn't play back. Returns "" to let the browser default.
+function pickAudioMime() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/aac",
+    "audio/ogg;codecs=opus",
+  ];
+  for (const t of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    } catch {
+      /* isTypeSupported can throw on some engines — keep trying */
+    }
+  }
+  return "";
+}
+
+// File extension matching the recorded MIME, so the stored file is served with
+// a sensible name/type for later playback on the result page.
+function extForMime(mime) {
+  const m = String(mime || "").toLowerCase();
+  if (m.includes("mp4") || m.includes("m4a") || m.includes("aac")) return "mp4";
+  if (m.includes("ogg")) return "ogg";
+  return "webm";
+}
+
 export default function Speaking({ embedded = false }) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
@@ -128,18 +160,38 @@ function Recorder({ task, onDone }) {
   const blobRef = useRef(null);
   const recogRef = useRef(null);
   const finalRef = useRef("");
+  const audioUrlRef = useRef("");
+
+  // Swap in a fresh preview URL, revoking the previous one to avoid leaks.
+  const setPreview = (blob) => {
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    const url = blob ? URL.createObjectURL(blob) : "";
+    audioUrlRef.current = url;
+    setAudioUrl(url);
+  };
+
+  useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
 
   const start = async () => {
     setError("");
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("Recording isn't supported in this browser. Try Chrome, Edge, or Safari 14.3+.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const mime = pickAudioMime();
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        // Build the blob from the type the recorder actually used (mr.mimeType),
+        // not a hardcoded one — otherwise iOS Safari's mp4 data gets mislabelled
+        // as webm and won't play back.
+        const type = mr.mimeType || mime || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
         blobRef.current = blob;
-        setAudioUrl(URL.createObjectURL(blob));
+        setPreview(blob);
         stream.getTracks().forEach((t) => t.stop());
       };
       mr.start();
@@ -187,7 +239,9 @@ function Recorder({ task, onDone }) {
       const fd = new FormData();
       fd.append("task_id", String(task.id));
       fd.append("transcript", transcript);
-      if (blobRef.current) fd.append("audio", blobRef.current, "answer.webm");
+      if (blobRef.current) {
+        fd.append("audio", blobRef.current, `answer.${extForMime(blobRef.current.type)}`);
+      }
       const res = await fetch(`${API_BASE}/api/speaking/submissions`, {
         method: "POST",
         headers: authHeaders(),

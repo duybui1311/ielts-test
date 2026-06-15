@@ -19,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { apiFetch } from "../api";
 import { StatCard, AiBadge, bandColor, chartTheme } from "../component/ui";
+import { BlurText } from "../component/TextReveal";
 import Heatmap from "../component/Heatmap";
 
 const PRACTICE = [
@@ -136,9 +137,12 @@ export default function Dashboard() {
         >
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="overline" sx={{ opacity: 0.85 }}>Your dashboard</Typography>
-            <Typography variant="h3" fontWeight={800} sx={{ lineHeight: 1.05 }}>
-              {greeting()}{name ? `, ${name.split(" ")[0]}` : ""}
-            </Typography>
+            <BlurText
+              variant="h3"
+              component="h1"
+              text={`${greeting()}${name ? `, ${name.split(" ")[0]}` : ""}`}
+              sx={{ fontWeight: 800, lineHeight: 1.05 }}
+            />
             <Typography sx={{ opacity: 0.9, mt: 0.5 }}>
               Here's how your IELTS practice is going.
             </Typography>

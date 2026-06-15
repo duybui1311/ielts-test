@@ -92,7 +92,7 @@ export default function Signup() {
 			}}
 		>
 			<AuthHero
-				headline={<>Start your <Box component="span" sx={{ color: "#FCD34D" }}>journey.</Box></>}
+				headline={<>Start your <Box component="span" sx={{ color: "#FF9013" }}>journey.</Box></>}
 				sub="Sign up to take realistic tests across all four skills, get AI feedback on Writing & Speaking, and track your band scores over time."
 			/>
 

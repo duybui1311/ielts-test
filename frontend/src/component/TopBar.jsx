@@ -107,7 +107,7 @@ export default function TopBar() {
           <Avatar
             sx={{
               width: 36, height: 36, fontSize: 14, fontWeight: 700, color: "#fff",
-              background: "linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%)",
+              background: "linear-gradient(135deg, #0046FF 0%, #73C8D2 100%)",
             }}
           >
             {initials(name)}

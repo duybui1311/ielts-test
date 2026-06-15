@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { apiFetch } from "../api";
 import { StatCard, bandColor, chartTheme } from "../component/ui";
+import { BlurText } from "../component/TextReveal";
 import Heatmap from "../component/Heatmap";
 
 function readName() {
@@ -73,9 +74,12 @@ export default function TeacherDashboard() {
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "flex-start", sm: "center" }} sx={{ position: "relative" }}>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="overline" sx={{ opacity: 0.85 }}>Teacher workspace</Typography>
-            <Typography variant="h3" fontWeight={800} sx={{ lineHeight: 1.05 }}>
-              Class Dashboard
-            </Typography>
+            <BlurText
+              variant="h3"
+              component="h1"
+              text="Class Dashboard"
+              sx={{ fontWeight: 800, lineHeight: 1.05 }}
+            />
             <Typography sx={{ opacity: 0.9, mt: 0.5 }}>
               {firstName ? `Welcome back, ${firstName}. ` : ""}Monitor your classes, exams and submissions.
             </Typography>
