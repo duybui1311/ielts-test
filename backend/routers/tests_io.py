@@ -7,6 +7,7 @@ import bcrypt
 from backend.service.database import get_db
 from backend.service import models, storage
 from backend.service.auth_deps import get_current_user, require_role
+from backend.service.subskills import SUB_SKILLS
 
 router = APIRouter(prefix="/api/tests", tags=["tests"])
 
@@ -19,6 +20,21 @@ _teacher = require_role("teacher", "admin")
 Difficulty = Literal["low", "medium", "high"]
 QType = Literal["mcq", "short", "explain"]
 Skill = Literal["reading", "listening", "writing", "speaking"]
+
+
+def _clean_sub_skill(sub_skill: Optional[str], qtype: str) -> Optional[str]:
+    """Keep sub_skill inside the closed analytics vocab so the weakness heatmap
+    never silently drops a manually-imported question (mirrors ai_import). Unknown
+    or missing values are clamped to a sensible default by question type; writing/
+    speaking ('explain') questions don't feed the sub-skill heatmap, so they get None."""
+    if sub_skill in SUB_SKILLS:
+        return sub_skill
+    if qtype == "mcq":
+        return "multiple_choice"
+    if qtype == "short":
+        return "short_answer"
+    return None
+
 
 # kind -> (Supabase Storage bucket, default extension, default content-type)
 _UPLOAD_KINDS = {
@@ -147,7 +163,7 @@ def import_test(
                 options_json=q.options,
                 correct_index=q.correct_index,
                 accept_answers=q.accept_answers,
-                sub_skill=q.sub_skill,
+                sub_skill=_clean_sub_skill(q.sub_skill, q.qtype),
                 display_order=q.display_order,
                 explanation=q.explanation,
                 support_sentences=q.support_sentences,
@@ -242,7 +258,7 @@ def _replace_sections(db: Session, exam: models.Exam, sections: List[SectionIn])
                 options_json=q.options,
                 correct_index=q.correct_index,
                 accept_answers=q.accept_answers,
-                sub_skill=q.sub_skill,
+                sub_skill=_clean_sub_skill(q.sub_skill, q.qtype),
                 display_order=q.display_order,
                 explanation=q.explanation,
                 support_sentences=q.support_sentences,
