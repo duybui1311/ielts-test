@@ -77,6 +77,17 @@ def create_app() -> FastAPI:
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
+    # Baseline security headers on every response. HSTS is intentionally left to
+    # the TLS-terminating proxy (Render) so local HTTP dev isn't affected.
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        return response
+
     app.include_router(auth.router)
     app.include_router(tests_io.router)
     app.include_router(autograde.router)

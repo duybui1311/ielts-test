@@ -11,8 +11,12 @@ from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import get_current_user
 from backend.service.explain import generate_for_question
+from backend.service.ratelimit import rate_limit
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
+
+# Guard the paid Gemini call: 20 explanations/min per user.
+_explain_limiter = rate_limit(20, 60)
 
 
 def _question_payload(q: models.Question) -> dict:
@@ -28,6 +32,7 @@ def explain_question(
     question_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    _rl: None = Depends(_explain_limiter),
 ):
     q = db.query(models.Question).filter(models.Question.id == question_id).first()
     if not q:
