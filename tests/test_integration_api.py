@@ -195,3 +195,88 @@ def test_full_student_attempt_autograde_and_weakness(client):
         assert queued[0].question_id == qids["Q_SHORT"]
     finally:
         db.close()
+
+
+def test_practice_flow_records_session_and_enqueues_review(client):
+    from backend.service import models
+    email, pw = _seed_teacher(client)
+    th = {"Authorization": f"Bearer {_token(client, email, pw)}"}
+    payload = {
+        "name": "GapFill Bank", "difficulty": "medium", "sections": [{
+            "position": 1, "skill": "reading", "title": "S", "passage_md": "Alpha. Charlie.",
+            "questions": [
+                {"qtype": "short", "prompt": "P1", "accept_answers": ["alpha"],
+                 "sub_skill": "gap_fill", "display_order": 1},
+                {"qtype": "short", "prompt": "P2", "accept_answers": ["charlie"],
+                 "sub_skill": "gap_fill", "display_order": 2},
+            ],
+        }],
+    }
+    client.post("/api/tests/import", json=payload, headers=th)
+
+    reg = client.post("/api/auth/register", json={"email": "prac@x.io", "password": "studentpass1"})
+    sh = {"Authorization": f"Bearer {reg.json()['token']}"}
+    student_id = reg.json()["user_id"]
+
+    skills = {s["sub_skill"]: s for s in client.get("/api/practice/skills", headers=sh).json()}
+    assert skills["gap_fill"]["available"] == 2
+
+    qmap = {q["prompt"]: q["id"]
+            for q in client.get("/api/practice/gap_fill", headers=sh).json()["questions"]}
+    submit = client.post("/api/practice/gap_fill/submit", json={"answers": [
+        {"question_id": qmap["P1"], "value_text": "alpha"},
+        {"question_id": qmap["P2"], "value_text": "wrong"},
+    ]}, headers=sh).json()
+    assert submit["total"] == 2 and submit["correct"] == 1
+
+    # PracticeSession feeds the heatmap tally.
+    skills2 = {s["sub_skill"]: s for s in client.get("/api/practice/skills", headers=sh).json()}
+    assert skills2["gap_fill"]["attempted"] == 2
+
+    # The missed question is enqueued for spaced review.
+    db = client.session_factory()
+    try:
+        rq = db.query(models.ReviewQueue).filter(models.ReviewQueue.user_id == student_id).all()
+        assert len(rq) == 1 and rq[0].question_id == qmap["P2"]
+    finally:
+        db.close()
+
+
+def test_review_due_and_reschedule(client):
+    from datetime import datetime, timedelta, timezone
+    from backend.service import models
+    email, pw = _seed_teacher(client)
+    th = {"Authorization": f"Bearer {_token(client, email, pw)}"}
+    payload = {
+        "name": "R", "difficulty": "medium", "sections": [{
+            "position": 1, "skill": "reading", "title": "S", "passage_md": "x",
+            "questions": [{"qtype": "short", "prompt": "RQ", "accept_answers": ["a"],
+                           "sub_skill": "gap_fill", "display_order": 1}],
+        }],
+    }
+    client.post("/api/tests/import", json=payload, headers=th)
+    reg = client.post("/api/auth/register", json={"email": "rev@x.io", "password": "studentpass1"})
+    sh = {"Authorization": f"Bearer {reg.json()['token']}"}
+    student_id = reg.json()["user_id"]
+
+    # Seed a review item that is already due (yesterday).
+    db = client.session_factory()
+    try:
+        q = db.query(models.Question).filter(models.Question.prompt == "RQ").first()
+        db.add(models.ReviewQueue(
+            user_id=student_id, question_id=q.id,
+            due_date=datetime.now(timezone.utc) - timedelta(days=1), interval_days=1,
+        ))
+        db.commit()
+        qid = q.id
+    finally:
+        db.close()
+
+    due = client.get("/api/review/due", headers=sh).json()
+    assert len(due) == 1 and due[0]["question_id"] == qid
+    assert client.get("/api/review/due_count", headers=sh).json()["due"] == 1
+
+    res = client.post(f"/api/review/{due[0]['id']}/result", json={"correct": True}, headers=sh).json()
+    assert res["interval_days"] == 2                      # 1 -> doubled
+    # Rescheduled into the future, so no longer due.
+    assert client.get("/api/review/due_count", headers=sh).json()["due"] == 0
