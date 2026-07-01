@@ -39,7 +39,8 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 # Guard the paid LLM import: 10 uploads/min per user.
 _ai_limiter = rate_limit(10, 60)
 
-MODEL = "claude-sonnet-4-6"
+# Anthropic model for the `claude` import provider. Override with ANTHROPIC_MODEL.
+MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 # Cap the uploaded test file so a huge upload can't exhaust server memory. We
 # read at most MAX_UPLOAD_BYTES + 1 bytes, so an oversized file is rejected

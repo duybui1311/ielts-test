@@ -32,8 +32,34 @@ _COLUMN_MIGRATIONS = [
 ]
 
 
+def _init_sentry() -> None:
+    """Enable Sentry error tracking when SENTRY_DSN is set (no-op otherwise)."""
+    dsn = os.getenv("SENTRY_DSN")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=dsn,
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            environment=os.getenv("ENV", "production"),
+        )
+        logger.info("Sentry error tracking enabled.")
+    except Exception:  # noqa: BLE001
+        logger.warning("SENTRY_DSN is set but Sentry init failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on misconfiguration instead of a confusing 500 on first request.
+    fatal, warnings = settings.check()
+    for w in warnings:
+        logger.warning("Config: %s", w)
+    if fatal:
+        for f in fatal:
+            logger.error("Config: %s", f)
+        raise RuntimeError("Invalid configuration: " + " ".join(fatal))
+
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
         for stmt in _COLUMN_MIGRATIONS:
@@ -45,6 +71,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    _init_sentry()
     app = FastAPI(title="IELTS Platform API", version="0.1.0", lifespan=lifespan)
 
     # Browsers send the Origin header with no trailing slash, so a configured

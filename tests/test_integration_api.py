@@ -135,3 +135,63 @@ def test_teacher_import_export_roundtrip_and_subskill_clamp(client):
     # N1: an off-vocab sub_skill on an MCQ is clamped; a valid one is preserved.
     assert questions[0]["sub_skill"] == "multiple_choice"
     assert questions[1]["sub_skill"] == "gap_fill"
+
+
+def test_full_student_attempt_autograde_and_weakness(client):
+    # Teacher creates a reading exam with a known answer key.
+    email, pw = _seed_teacher(client)
+    th = {"Authorization": f"Bearer {_token(client, email, pw)}"}
+    payload = {
+        "name": "Reading E2E", "difficulty": "medium", "time_limit_min": 60, "access_code": "1234",
+        "sections": [{
+            "position": 1, "skill": "reading", "title": "Passage",
+            "passage_md": "The cat sat on the mat.",
+            "questions": [
+                {"qtype": "mcq", "prompt": "Q_MCQ", "options": ["cat", "dog"],
+                 "correct_index": 0, "sub_skill": "multiple_choice", "display_order": 1},
+                {"qtype": "short", "prompt": "Q_SHORT", "accept_answers": ["mat"],
+                 "sub_skill": "sentence_completion", "display_order": 2},
+            ],
+        }],
+    }
+    exam_id = client.post("/api/tests/import", json=payload, headers=th).json()["exam_id"]
+
+    # Student registers, sees the exam, and starts an attempt.
+    reg = client.post("/api/auth/register", json={"email": "learner@x.io", "password": "studentpass1"})
+    sh = {"Authorization": f"Bearer {reg.json()['token']}"}
+    assert any(e["id"] == exam_id for e in client.get("/api/exams", headers=sh).json())
+
+    start = client.post("/api/attempts/start", json={"exam_id": exam_id}, headers=sh).json()
+    attempt_id = start["attempt_id"]
+    qids = {q["prompt"]: q["id"] for s in start["sections"] for q in s["questions"]}
+
+    # Answer the MCQ correctly and the short answer incorrectly.
+    client.post(f"/api/attempts/{attempt_id}/answer",
+                json={"question_id": qids["Q_MCQ"], "choice_index": 0}, headers=sh)
+    client.post(f"/api/attempts/{attempt_id}/answer",
+                json={"question_id": qids["Q_SHORT"], "value_text": "wrong"}, headers=sh)
+
+    submit = client.post(f"/api/attempts/{attempt_id}/submit", headers=sh).json()
+    assert submit["status"] == "graded"
+    assert submit["overall_band"] == 5.5   # 1/2 correct -> scaled 20 -> reading band 5.5
+
+    results = client.get(f"/api/attempts/{attempt_id}/results", headers=sh).json()
+    sec = results["sections"][0]
+    assert sec["raw_score"] == 1.0
+    assert sec["band"] == 5.5
+    by_prompt = {q["prompt"]: q for q in sec["questions"]}
+    assert by_prompt["Q_MCQ"]["is_auto_correct"] is True
+    assert by_prompt["Q_SHORT"]["is_auto_correct"] is False
+    # Weakness chart reflects the missed short-answer sub-skill.
+    weakness = {w["name"]: w["misses"] for w in results["weakness_chart"]}
+    assert weakness.get("sentence_completion") == 1
+
+    # The missed question was enqueued for spaced review.
+    from backend.service import models
+    db = client.session_factory()
+    try:
+        queued = db.query(models.ReviewQueue).all()
+        assert len(queued) == 1
+        assert queued[0].question_id == qids["Q_SHORT"]
+    finally:
+        db.close()
