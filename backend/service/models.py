@@ -491,3 +491,14 @@ class ReviewHistory(Base):
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
     correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ExplanationReport(Base):
+    """A learner/teacher flag that a question's AI explanation looks wrong
+    (fabricated or incorrect). Recorded for review — the AI-quality loop."""
+    __tablename__ = "explanation_reports"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

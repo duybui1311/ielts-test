@@ -22,6 +22,17 @@ export default function ExplanationPanel({
   const [support, setSupport] = React.useState(initialSupport || []);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [reported, setReported] = React.useState(false);
+
+  const reportExplanation = React.useCallback(async () => {
+    if (!questionId) return;
+    setReported(true);   // optimistic; a failed report is non-critical
+    try {
+      await apiFetch(`/api/questions/${questionId}/report-explanation`, { method: "POST" });
+    } catch {
+      // ignore — the flag is best-effort feedback
+    }
+  }, [questionId]);
 
   const generate = React.useCallback(async () => {
     if (!questionId) return;
@@ -122,6 +133,23 @@ export default function ExplanationPanel({
                   </Stack>
                 </Box>
               )}
+              <Box>
+                {reported ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Thanks — this explanation was reported for review.
+                  </Typography>
+                ) : (
+                  <Button
+                    size="small"
+                    variant="text"
+                    color="inherit"
+                    onClick={reportExplanation}
+                    sx={{ color: "text.secondary", textTransform: "none", fontSize: 12, px: 0 }}
+                  >
+                    Report this explanation
+                  </Button>
+                )}
+              </Box>
             </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">

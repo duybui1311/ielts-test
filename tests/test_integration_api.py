@@ -280,3 +280,39 @@ def test_review_due_and_reschedule(client):
     assert res["interval_days"] == 2                      # 1 -> doubled
     # Rescheduled into the future, so no longer due.
     assert client.get("/api/review/due_count", headers=sh).json()["due"] == 0
+
+
+def test_explanation_report_flow(client):
+    from backend.service import models
+    email, pw = _seed_teacher(client)
+    th = {"Authorization": f"Bearer {_token(client, email, pw)}"}
+    payload = {
+        "name": "E", "difficulty": "medium", "sections": [{
+            "position": 1, "skill": "reading", "title": "S", "passage_md": "x",
+            "questions": [{"qtype": "mcq", "prompt": "EQ", "options": ["a", "b"],
+                           "correct_index": 0, "sub_skill": "multiple_choice", "display_order": 1}],
+        }],
+    }
+    client.post("/api/tests/import", json=payload, headers=th)
+    db = client.session_factory()
+    try:
+        qid = db.query(models.Question).filter(models.Question.prompt == "EQ").first().id
+    finally:
+        db.close()
+
+    reg = client.post("/api/auth/register", json={"email": "rep@x.io", "password": "studentpass1"})
+    sh = {"Authorization": f"Bearer {reg.json()['token']}"}
+
+    # Listing reports is teacher-only.
+    assert client.get("/api/questions/explanation-reports", headers=sh).status_code == 403
+
+    # A student can report (with a reason, and with no body at all).
+    assert client.post(f"/api/questions/{qid}/report-explanation",
+                       json={"reason": "made up"}, headers=sh).status_code == 200
+    assert client.post(f"/api/questions/{qid}/report-explanation", headers=sh).status_code == 200
+
+    # The teacher sees both reports.
+    reports = client.get("/api/questions/explanation-reports", headers=th).json()
+    assert len(reports) == 2
+    assert all(rep["question_id"] == qid for rep in reports)
+    assert any(rep["reason"] == "made up" for rep in reports)
