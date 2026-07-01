@@ -23,12 +23,20 @@ UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 logger = logging.getLogger("backend")
 
 
-# Columns added to existing tables after the original schema. `create_all` only
-# creates missing tables, never alters existing ones, so we add them idempotently
-# here (Postgres supports ADD COLUMN IF NOT EXISTS).
-_COLUMN_MIGRATIONS = [
+# Idempotent schema tweaks applied on startup. `create_all` only creates missing
+# tables — it never alters existing ones or adds indexes — so post-hoc columns and
+# performance indexes are applied here (Postgres supports IF NOT EXISTS for both).
+# Until Alembic is adopted (see backend/migrations/), this is the schema-evolution
+# path for the live database.
+_SCHEMA_MIGRATIONS = [
     "ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT",
     "ALTER TABLE questions ADD COLUMN IF NOT EXISTS support_sentences JSON",
+    # Indexes for the analytics / weakness-heatmap / spaced-review hot paths.
+    # Postgres does not auto-index foreign-key columns, so these matter as data grows.
+    "CREATE INDEX IF NOT EXISTS ix_error_tags_user_exam ON error_tags (user_id, exam_id)",
+    "CREATE INDEX IF NOT EXISTS ix_exam_attempts_user ON exam_attempts (user_id)",
+    "CREATE INDEX IF NOT EXISTS ix_review_queue_user_due ON review_queue (user_id, due_date)",
+    "CREATE INDEX IF NOT EXISTS ix_practice_sessions_user ON practice_sessions (user_id)",
 ]
 
 
@@ -62,7 +70,7 @@ async def lifespan(app: FastAPI):
 
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
-        for stmt in _COLUMN_MIGRATIONS:
+        for stmt in _SCHEMA_MIGRATIONS:
             try:
                 conn.execute(text(stmt))
             except Exception:  # noqa: BLE001 — non-Postgres or already applied
@@ -142,7 +150,19 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health_check():
+        """Liveness: the process is up (does not touch the database)."""
         return {"status": "ok"}
+
+    @app.get("/api/ready")
+    async def readiness_check():
+        """Readiness: the process is up AND the database is reachable."""
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {"status": "ready"}
+        except Exception:  # noqa: BLE001
+            logger.warning("Readiness check failed", exc_info=True)
+            return JSONResponse(status_code=503, content={"status": "not ready"})
 
     return app
 
