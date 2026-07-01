@@ -9,8 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from .service.config import settings
-from .service.database import Base, engine
-from .service import models  # noqa: F401  (registers tables)
+from .service.database import engine
+from .service import models  # noqa: F401  (registers tables for Alembic autogenerate)
 from .routers import (
     auth, tests_io, autograde, analytics, student_flow,
     dashboard, me, flashcards, teacher,
@@ -21,23 +21,6 @@ from .routers import (
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 
 logger = logging.getLogger("backend")
-
-
-# Idempotent schema tweaks applied on startup. `create_all` only creates missing
-# tables — it never alters existing ones or adds indexes — so post-hoc columns and
-# performance indexes are applied here (Postgres supports IF NOT EXISTS for both).
-# Until Alembic is adopted (see backend/migrations/), this is the schema-evolution
-# path for the live database.
-_SCHEMA_MIGRATIONS = [
-    "ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT",
-    "ALTER TABLE questions ADD COLUMN IF NOT EXISTS support_sentences JSON",
-    # Indexes for the analytics / weakness-heatmap / spaced-review hot paths.
-    # Postgres does not auto-index foreign-key columns, so these matter as data grows.
-    "CREATE INDEX IF NOT EXISTS ix_error_tags_user_exam ON error_tags (user_id, exam_id)",
-    "CREATE INDEX IF NOT EXISTS ix_exam_attempts_user ON exam_attempts (user_id)",
-    "CREATE INDEX IF NOT EXISTS ix_review_queue_user_due ON review_queue (user_id, due_date)",
-    "CREATE INDEX IF NOT EXISTS ix_practice_sessions_user ON practice_sessions (user_id)",
-]
 
 
 def _init_sentry() -> None:
@@ -68,13 +51,8 @@ async def lifespan(app: FastAPI):
             logger.error("Config: %s", f)
         raise RuntimeError("Invalid configuration: " + " ".join(fatal))
 
-    Base.metadata.create_all(bind=engine)
-    with engine.begin() as conn:
-        for stmt in _SCHEMA_MIGRATIONS:
-            try:
-                conn.execute(text(stmt))
-            except Exception:  # noqa: BLE001 — non-Postgres or already applied
-                pass
+    # Schema is owned by Alembic now — migrations run at deploy time via the Docker
+    # entrypoint (`alembic upgrade head`), not on app startup. See docs/MIGRATIONS.md.
     yield
 
 
