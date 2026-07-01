@@ -1,21 +1,12 @@
 # Database migrations (Alembic)
 
-Alembic is set up but **not yet wired into deploy** — the app still creates tables
-with `create_all` on startup, so nothing changed at runtime. Adopt it when you're
-ready to evolve the schema safely.
+**Alembic owns the schema.** The app no longer calls `create_all`; migrations run
+automatically at deploy time via the Docker entrypoint
+(`alembic -c alembic.ini upgrade head && uvicorn ...`). A failed migration fails
+the deploy, so the app is never served against a mismatched schema.
 
-## One-time adoption on the live database
-The live Supabase DB already has every table (from `create_all`). Tell Alembic the
-baseline is already applied — do **not** run `upgrade` on it (that would try to
-re-create existing tables):
-
-```bash
-# with DATABASE_URL pointing at the live DB
-alembic -c alembic.ini stamp head
-```
-
-After stamping, remove `create_all` from `backend/main.py`'s lifespan and let
-migrations own the schema.
+The live DB was already stamped at the baseline (`0001_baseline`), so on every
+deploy `upgrade head` is a no-op until there's a new migration to apply.
 
 ## Fresh database (local/staging)
 ```bash
@@ -30,6 +21,8 @@ alembic -c alembic.ini revision --autogenerate -m "add xyz"
 # 3. review the file in backend/migrations/versions/, then
 alembic -c alembic.ini upgrade head
 ```
+
+Then commit the generated migration — the next deploy applies it automatically.
 
 Config: `alembic.ini` (script location) + `backend/migrations/env.py` (reads
 `DATABASE_URL` via the app settings and uses `Base.metadata`). The baseline
