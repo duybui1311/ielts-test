@@ -32,10 +32,15 @@ from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import require_role
 from backend.service.subskills import SUB_SKILLS
+from backend.service.ratelimit import rate_limit
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
-MODEL = "claude-sonnet-4-6"
+# Guard the paid LLM import: 10 uploads/min per user.
+_ai_limiter = rate_limit(10, 60)
+
+# Anthropic model for the `claude` import provider. Override with ANTHROPIC_MODEL.
+MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 # Cap the uploaded test file so a huge upload can't exhaust server memory. We
 # read at most MAX_UPLOAD_BYTES + 1 bytes, so an oversized file is rejected
@@ -412,6 +417,7 @@ async def ai_import(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_role("teacher", "admin")),
+    _rl: None = Depends(_ai_limiter),
 ):
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
     run = _PROVIDERS.get(provider)

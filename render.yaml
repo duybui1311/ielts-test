@@ -1,0 +1,29 @@
+# Render Blueprint (infrastructure-as-code) for the IELTS backend API.
+# Adopt via Render > Blueprints > New Blueprint Instance, or keep as reference for
+# your existing manual service. Secrets are `sync: false` so applying this never
+# overwrites values you already set in the dashboard.
+services:
+  - type: web
+    name: ielts-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL          # Supabase session-pooler connection string
+        sync: false
+      - key: JWT_SECRET            # long random string; keep stable to avoid logging users out
+        sync: false
+      - key: FRONTEND_URL          # exact frontend origin, e.g. https://app.yourdomain.com
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false

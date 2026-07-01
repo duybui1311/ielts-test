@@ -32,8 +32,34 @@ _COLUMN_MIGRATIONS = [
 ]
 
 
+def _init_sentry() -> None:
+    """Enable Sentry error tracking when SENTRY_DSN is set (no-op otherwise)."""
+    dsn = os.getenv("SENTRY_DSN")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=dsn,
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            environment=os.getenv("ENV", "production"),
+        )
+        logger.info("Sentry error tracking enabled.")
+    except Exception:  # noqa: BLE001
+        logger.warning("SENTRY_DSN is set but Sentry init failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on misconfiguration instead of a confusing 500 on first request.
+    fatal, warnings = settings.check()
+    for w in warnings:
+        logger.warning("Config: %s", w)
+    if fatal:
+        for f in fatal:
+            logger.error("Config: %s", f)
+        raise RuntimeError("Invalid configuration: " + " ".join(fatal))
+
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
         for stmt in _COLUMN_MIGRATIONS:
@@ -45,14 +71,19 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    _init_sentry()
     app = FastAPI(title="IELTS Platform API", version="0.1.0", lifespan=lifespan)
 
     # Browsers send the Origin header with no trailing slash, so a configured
     # FRONTEND_URL like "https://app.pages.dev/" would never match. Normalize it.
-    origins = {
-        (settings.FRONTEND_URL or "").rstrip("/"),
+    # FRONTEND_URL may also be a comma-separated list (e.g. the Cloudflare prod
+    # domain plus a preview domain), so split and normalize each entry.
+    configured = [u.strip().rstrip("/") for u in (settings.FRONTEND_URL or "").split(",")]
+    origins = set(configured) | {
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:5173",      # Vite dev default
+        "http://127.0.0.1:5173",
     }
     origins.discard("")
     app.add_middleware(
@@ -76,6 +107,17 @@ def create_app() -> FastAPI:
     async def _on_unhandled_error(request: Request, exc: Exception):
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    # Baseline security headers on every response. HSTS is intentionally left to
+    # the TLS-terminating proxy (Render) so local HTTP dev isn't affected.
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        return response
 
     app.include_router(auth.router)
     app.include_router(tests_io.router)
