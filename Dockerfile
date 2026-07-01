@@ -17,9 +17,18 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend ./backend
 
 # Local fallback dir for the /uploads static mount (Supabase Storage is preferred).
-RUN mkdir -p backend/uploads
+# Run as a non-root user and give it ownership of the app dir (uploads must be
+# writable at runtime).
+RUN mkdir -p backend/uploads \
+    && useradd --create-home --uid 1000 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
+
+# Container-level health probe (Render also uses healthCheckPath in render.yaml).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+    CMD python -c "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8000')+'/api/health', timeout=4).status==200 else 1)"
 
 # Shell form so $PORT (set by the platform, defaulting to 8000) is expanded.
 CMD uvicorn backend.main:app --host 0.0.0.0 --port $PORT

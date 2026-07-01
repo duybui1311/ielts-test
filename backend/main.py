@@ -49,10 +49,14 @@ def create_app() -> FastAPI:
 
     # Browsers send the Origin header with no trailing slash, so a configured
     # FRONTEND_URL like "https://app.pages.dev/" would never match. Normalize it.
-    origins = {
-        (settings.FRONTEND_URL or "").rstrip("/"),
+    # FRONTEND_URL may also be a comma-separated list (e.g. the Cloudflare prod
+    # domain plus a preview domain), so split and normalize each entry.
+    configured = [u.strip().rstrip("/") for u in (settings.FRONTEND_URL or "").split(",")]
+    origins = set(configured) | {
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:5173",      # Vite dev default
+        "http://127.0.0.1:5173",
     }
     origins.discard("")
     app.add_middleware(
