@@ -14,7 +14,7 @@ from fastapi import HTTPException
 _INSTRUCTION = (
     "You are an IELTS tutor. Given a reading passage or listening transcript, a "
     "question and its correct answer, write a short, plain-language explanation.\n"
-    "Return JSON with exactly two fields:\n"
+    "Return JSON with these fields:\n"
     "- \"explanation\": 2-3 sentences explaining WHY the correct answer is correct. "
     "Where the question has other options or plausible-looking wrong answers, briefly "
     "say why a common wrong choice is a trap.\n"
@@ -22,6 +22,15 @@ _INSTRUCTION = (
     "the passage/transcript that justify the answer (1-2 sentences). Copy them word "
     "for word so they can be highlighted in the passage. If nothing in the passage "
     "directly supports it, return an empty array.\n"
+    "- \"paraphrases\": an array of the wording pairs that link the question to the "
+    "passage — how the question rephrases the passage. Each item has "
+    "\"question_phrase\" (a short phrase from the question or correct option) and "
+    "\"passage_phrase\" (the corresponding phrase copied VERBATIM from the passage). "
+    "Give 1-3 pairs; return an empty array if there is no meaningful paraphrase.\n"
+    "- \"mistake_note\": ONLY when the input includes \"student_answer\" (an incorrect "
+    "answer the student actually gave): 1-2 sentences addressed to the student "
+    "explaining why THAT answer is wrong — name the trap they fell into, quoting the "
+    "misleading words if any. Otherwise return an empty string.\n"
     "Do not invent passage text. Keep it concise and student-friendly."
 )
 
@@ -30,8 +39,20 @@ _SCHEMA = {
     "properties": {
         "explanation": {"type": "STRING"},
         "support_sentences": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "paraphrases": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "question_phrase": {"type": "STRING"},
+                    "passage_phrase": {"type": "STRING"},
+                },
+                "required": ["question_phrase", "passage_phrase"],
+            },
+        },
+        "mistake_note": {"type": "STRING"},
     },
-    "required": ["explanation", "support_sentences"],
+    "required": ["explanation", "support_sentences", "paraphrases"],
 }
 
 
@@ -68,8 +89,26 @@ def _ground_support(support_sentences, passage_md: str) -> list[str]:
     return [s for s in support_sentences if _appears_in_passage(s, passage_md)]
 
 
-def generate_for_question(question, passage_md: str, skill: str | None) -> dict:
-    """Call Gemini and return {"explanation": str, "support_sentences": [str]}.
+def _ground_paraphrases(pairs, passage_md: str) -> list[dict]:
+    """Keep only paraphrase pairs whose passage phrase really occurs in the
+    passage (same guarantee as support sentences: nothing shown as 'from the
+    passage' is fabricated)."""
+    out = []
+    for p in pairs or []:
+        if not isinstance(p, dict):
+            continue
+        qp = str(p.get("question_phrase") or "").strip()
+        pp = str(p.get("passage_phrase") or "").strip()
+        if qp and pp and _appears_in_passage(pp, passage_md):
+            out.append({"question_phrase": qp, "passage_phrase": pp})
+    return out[:3]
+
+
+def generate_for_question(question, passage_md: str, skill: str | None,
+                          student_answer: str | None = None) -> dict:
+    """Call Gemini and return {"explanation", "support_sentences", "paraphrases",
+    "mistake_note"}. `student_answer`, when given, is the student's own (wrong)
+    answer — the model then also explains why that specific answer fails.
 
     Raises HTTPException(503/502) on configuration/service problems so callers can
     surface a friendly message.
@@ -100,6 +139,8 @@ def generate_for_question(question, passage_md: str, skill: str | None) -> dict:
         "correct_answer": _correct_answer_text(question),
         "sub_skill": question.sub_skill,
     }
+    if student_answer and str(student_answer).strip():
+        payload["student_answer"] = str(student_answer).strip()
 
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -129,6 +170,13 @@ def generate_for_question(question, passage_md: str, skill: str | None) -> dict:
     # Ground the citations: only keep support sentences that really appear in the
     # passage, so the UI never shows fabricated "supporting evidence".
     support = _ground_support(support, passage_md)
+    paraphrases = _ground_paraphrases(data.get("paraphrases"), passage_md)
+    mistake_note = (data.get("mistake_note") or "").strip() if payload.get("student_answer") else ""
     if not explanation:
         raise HTTPException(502, "The AI did not return an explanation. Please try again.")
-    return {"explanation": explanation, "support_sentences": support}
+    return {
+        "explanation": explanation,
+        "support_sentences": support,
+        "paraphrases": paraphrases,
+        "mistake_note": mistake_note,
+    }

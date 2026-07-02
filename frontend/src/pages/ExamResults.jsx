@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useImperativeHandle, forwardRef } from "react";
 import {
   Box, Typography, Paper, Stack, Chip, Alert,
   CircularProgress, Divider, Button, Collapse, useTheme,
+  FormControlLabel, Switch, Tooltip as MuiTooltip,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import MenuBookRoundedIcon from "@mui/icons-material/MenuBookRounded";
+import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
+import FitnessCenterRoundedIcon from "@mui/icons-material/FitnessCenterRounded";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -15,11 +18,59 @@ import { alpha } from "@mui/material/styles";
 import { apiFetch } from "../api";
 import { PageHeader, chartTheme } from "../component/ui";
 import ExplanationPanel from "../component/ExplanationPanel";
-import HighlightedText from "../component/HighlightedText";
+import HighlightedText, { normalizeFragment } from "../component/HighlightedText";
 
-/** Collapsible passage/transcript with the section's support sentences highlighted. */
-function SectionPassage({ passage, sentences }) {
+/**
+ * Collapsible passage/transcript with the section's support sentences
+ * highlighted. Exposes `locate(sentence)` via ref: opens the passage, scrolls
+ * to that sentence's highlight and flashes it (jump-to-evidence).
+ */
+const SectionPassage = forwardRef(function SectionPassage({ passage, sentences }, ref) {
   const [open, setOpen] = useState(false);
+  const bodyRef = useRef(null);
+  const pendingRef = useRef(null);
+
+  const flashMark = (sentence) => {
+    const target = normalizeFragment(sentence);
+    const marks = bodyRef.current?.querySelectorAll("mark[data-hl]") || [];
+    for (const el of marks) {
+      if (el.dataset.hl === target) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.animate(
+          [
+            { boxShadow: "0 0 0 6px rgba(255, 193, 7, 0.55)", offset: 0.2 },
+            { boxShadow: "0 0 0 0 rgba(255, 193, 7, 0)" },
+          ],
+          { duration: 1400, easing: "ease-out" }
+        );
+        return true;
+      }
+    }
+    return false;
+  };
+
+  useImperativeHandle(ref, () => ({
+    locate(sentence) {
+      if (open) {
+        flashMark(sentence);
+      } else {
+        // Open first; flash once the collapse has rendered the marks.
+        pendingRef.current = sentence;
+        setOpen(true);
+      }
+    },
+  }));
+
+  useEffect(() => {
+    if (open && pendingRef.current) {
+      const sentence = pendingRef.current;
+      pendingRef.current = null;
+      // Wait for the Collapse transition so scrollIntoView lands correctly.
+      const t = setTimeout(() => flashMark(sentence), 320);
+      return () => clearTimeout(t);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!passage || !passage.trim()) return null;
   return (
     <Box sx={{ px: 2, pt: 1.5 }}>
@@ -34,6 +85,7 @@ function SectionPassage({ passage, sentences }) {
       </Button>
       <Collapse in={open} unmountOnExit>
         <Box
+          ref={bodyRef}
           sx={(t) => ({
             mt: 1, p: 2, borderRadius: 2, maxHeight: 360, overflowY: "auto",
             border: `1px solid ${t.palette.divider}`, bgcolor: "background.default",
@@ -44,7 +96,7 @@ function SectionPassage({ passage, sentences }) {
       </Collapse>
     </Box>
   );
-}
+});
 
 function BandCircle({ band }) {
   const key = band == null ? "info" : band >= 7 ? "success" : band >= 5 ? "warning" : "error";
@@ -92,6 +144,8 @@ export default function ExamResults() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [onlyMistakes, setOnlyMistakes] = useState(false);
+  const passageRefs = useRef({}); // station_id -> SectionPassage handle
 
   useEffect(() => {
     apiFetch(`/api/attempts/${attemptId}/results`)
@@ -112,6 +166,24 @@ export default function ExamResults() {
   if (!data) return null;
 
   const ct = chartTheme(theme);
+
+  const wrongCount = (data.sections || []).reduce(
+    (n, sec) => n + (sec.questions || []).filter((q) => q.is_auto_correct === false).length,
+    0
+  );
+
+  // "Only mistakes" view: drop correct/unmarked questions and empty sections.
+  const visibleSections = (data.sections || [])
+    .map((sec) => ({
+      ...sec,
+      // Keep the original question number when filtering to mistakes only.
+      visibleQuestions: (sec.questions || [])
+        .map((q, i) => ({ q, num: i + 1 }))
+        .filter(({ q }) => !onlyMistakes || q.is_auto_correct === false),
+    }))
+    .filter((sec) => sec.visibleQuestions.length > 0);
+
+  const drill = (subSkill) => subSkill && navigate(`/practice/${subSkill}`);
 
   return (
     <Box>
@@ -145,8 +217,42 @@ export default function ExamResults() {
         </Typography>
       </Paper>
 
+      {/* ── Review-queue banner: mistakes are auto-scheduled for spaced review ── */}
+      {wrongCount > 0 && (
+        <Alert
+          severity="info"
+          icon={<ReplayRoundedIcon />}
+          sx={{ mb: 3, alignItems: "center" }}
+          action={
+            <Button color="inherit" size="small" onClick={() => navigate("/review")}>
+              Review now
+            </Button>
+          }
+        >
+          {wrongCount === 1 ? "1 mistake was" : `${wrongCount} mistakes were`} added
+          to your review queue — they'll resurface for spaced practice until you get
+          them right.
+        </Alert>
+      )}
+
+      {/* ── Filter ── */}
+      {wrongCount > 0 && (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={onlyMistakes}
+                onChange={(e) => setOnlyMistakes(e.target.checked)}
+              />
+            }
+            label={<Typography variant="body2">Only mistakes ({wrongCount})</Typography>}
+          />
+        </Box>
+      )}
+
       {/* ── Per-section breakdown ── */}
-      {(data.sections || []).map((sec) => (
+      {visibleSections.map((sec) => (
         <Paper key={sec.station_id} variant="outlined" sx={{ mb: 3 }}>
           {/* Section header */}
           <Box
@@ -194,13 +300,17 @@ export default function ExamResults() {
           <Divider />
 
           <SectionPassage
+            ref={(h) => { passageRefs.current[sec.station_id] = h; }}
             passage={sec.passage_md}
-            sentences={(sec.questions || []).flatMap((q) => q.support_sentences || [])}
+            sentences={(sec.questions || []).flatMap((q) => [
+              ...(q.support_sentences || []),
+              ...(q.paraphrases || []).map((p) => p.passage_phrase),
+            ])}
           />
 
           {/* Per-question rows */}
           <Box sx={{ p: 2 }}>
-            {(sec.questions || []).map((q, qi) => (
+            {sec.visibleQuestions.map(({ q, num }, qi) => (
               <Box
                 key={q.id}
                 sx={{
@@ -209,7 +319,7 @@ export default function ExamResults() {
                   gap: 1.5,
                   py: 1.5,
                   borderBottom:
-                    qi < sec.questions.length - 1 ? "1px solid" : "none",
+                    qi < sec.visibleQuestions.length - 1 ? "1px solid" : "none",
                   borderColor: "divider",
                 }}
               >
@@ -233,7 +343,7 @@ export default function ExamResults() {
                 {/* Text */}
                 <Box flex={1} minWidth={0}>
                   <Typography variant="body2" fontWeight={500}>
-                    Q{qi + 1}. {q.prompt}
+                    Q{num}. {q.prompt}
                   </Typography>
                   <Typography
                     variant="body2"
@@ -257,18 +367,26 @@ export default function ExamResults() {
                       questionId={q.id}
                       explanation={q.explanation}
                       supportSentences={q.support_sentences}
+                      paraphrases={q.paraphrases}
+                      studentAnswer={q.student_answer}
+                      wasWrong={q.is_auto_correct === false}
+                      onLocate={(s) => passageRefs.current[sec.station_id]?.locate(s)}
                     />
                   )}
                 </Box>
 
-                {/* Sub-skill tag */}
+                {/* Sub-skill tag → one-click drill of that question type */}
                 {q.sub_skill && (
-                  <Chip
-                    label={q.sub_skill.replace(/_/g, " ")}
-                    size="small"
-                    variant="outlined"
-                    sx={{ flexShrink: 0, mt: 0.25 }}
-                  />
+                  <MuiTooltip title={`Practice ${q.sub_skill.replace(/_/g, " ")} questions`}>
+                    <Chip
+                      label={q.sub_skill.replace(/_/g, " ")}
+                      size="small"
+                      variant="outlined"
+                      icon={<FitnessCenterRoundedIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => drill(q.sub_skill)}
+                      sx={{ flexShrink: 0, mt: 0.25, cursor: "pointer" }}
+                    />
+                  </MuiTooltip>
                 )}
               </Box>
             ))}
@@ -279,8 +397,11 @@ export default function ExamResults() {
       {/* ── Weakness chart ── */}
       {data.weakness_chart && data.weakness_chart.length > 0 && (
         <Paper variant="outlined" sx={{ p: 3, mb: 4 }}>
-          <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+          <Typography variant="subtitle1" fontWeight={700}>
             Mistake Patterns
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Click a bar to drill that question type.
           </Typography>
           <ResponsiveContainer
             width="100%"
@@ -302,7 +423,13 @@ export default function ExamResults() {
                 tickFormatter={(v) => v.replace(/_/g, " ")}
               />
               <Tooltip {...ct.tooltip} formatter={(v) => [v, "mistakes"]} cursor={{ fill: ct.grid.stroke }} />
-              <Bar dataKey="misses" fill={theme.palette.primary.main} radius={[0, 4, 4, 0]} />
+              <Bar
+                dataKey="misses"
+                fill={theme.palette.primary.main}
+                radius={[0, 4, 4, 0]}
+                cursor="pointer"
+                onClick={(d) => drill(d?.name)}
+              />
             </BarChart>
           </ResponsiveContainer>
         </Paper>

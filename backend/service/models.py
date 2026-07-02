@@ -213,6 +213,10 @@ class Question(Base):
     # cached here so each question is only explained once.
     explanation: Mapped[Optional[str]] = mapped_column(Text)
     support_sentences: Mapped[Optional[list]] = mapped_column(JSON)
+    # Paraphrase map: [{"question_phrase": str, "passage_phrase": str}, ...] —
+    # wording pairs linking the question to the passage, the skill IELTS
+    # reading/listening actually tests.
+    paraphrases: Mapped[Optional[list]] = mapped_column(JSON)
     station: Mapped["Station"] = relationship("Station", back_populates="questions")
     answers: Mapped[List["Answer"]] = relationship("Answer", back_populates="question")
 

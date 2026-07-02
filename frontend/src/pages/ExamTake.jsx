@@ -4,14 +4,19 @@ import React, {
 import {
   Box, Typography, Paper, RadioGroup, FormControlLabel, Radio,
   TextField, Button, Stack, Alert, CircularProgress, Chip, Tooltip, LinearProgress,
+  IconButton, Snackbar,
 } from "@mui/material";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CloudDoneRoundedIcon from "@mui/icons-material/CloudDoneRounded";
 import CloudSyncRoundedIcon from "@mui/icons-material/CloudSyncRounded";
+import FlagRoundedIcon from "@mui/icons-material/FlagRounded";
+import OutlinedFlagRoundedIcon from "@mui/icons-material/OutlinedFlagRounded";
+import BorderColorRoundedIcon from "@mui/icons-material/BorderColorRounded";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, mediaUrl } from "../api";
 import { SkillChip } from "../component/ui";
 import { TOPBAR_HEIGHT } from "../component/TopBar";
+import HighlightedText, { normalizeFragment } from "../component/HighlightedText";
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
@@ -41,6 +46,59 @@ export default function ExamTake() {
   const [submitting, setSubmitting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
+  const [timeToast, setTimeToast] = useState("");
+
+  // Flag-for-review + passage highlights survive a refresh via localStorage,
+  // scoped to this attempt.
+  const [flags, setFlags] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`exam-flags-${attemptId}`)) || {}; }
+    catch { return {}; }
+  });
+  const [highlights, setHighlights] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`exam-hl-${attemptId}`)) || {}; }
+    catch { return {}; }
+  });
+  const [highlightMode, setHighlightMode] = useState(false);
+
+  const toggleFlag = (questionId) => {
+    setFlags((f) => {
+      const next = { ...f, [questionId]: !f[questionId] };
+      if (!next[questionId]) delete next[questionId];
+      try { localStorage.setItem(`exam-flags-${attemptId}`, JSON.stringify(next)); } catch { /* best-effort */ }
+      return next;
+    });
+  };
+
+  const setStationHighlights = (stationId, list) => {
+    setHighlights((h) => {
+      const next = { ...h, [stationId]: list };
+      if (!list.length) delete next[stationId];
+      try { localStorage.setItem(`exam-hl-${attemptId}`, JSON.stringify(next)); } catch { /* best-effort */ }
+      return next;
+    });
+  };
+
+  // Highlighter: capture the text selection inside a passage and mark it.
+  const captureHighlight = (stationId) => {
+    if (!highlightMode) return;
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().replace(/\s+/g, " ").trim() : "";
+    if (!text || text.length < 3) return;
+    const existing = highlights[stationId] || [];
+    if (!existing.some((s) => normalizeFragment(s) === normalizeFragment(text))) {
+      setStationHighlights(stationId, [...existing, text]);
+    }
+    sel.removeAllRanges();
+  };
+
+  const removeHighlight = (stationId, matchedText) => {
+    const target = normalizeFragment(matchedText);
+    const existing = highlights[stationId] || [];
+    setStationHighlights(
+      stationId,
+      existing.filter((s) => !(target.includes(normalizeFragment(s)) || normalizeFragment(s).includes(target)))
+    );
+  };
 
   const submitted = useRef(false);
   const answersRef = useRef({});
@@ -132,6 +190,9 @@ export default function ExamTake() {
       handleSubmitRef.current?.();
       return;
     }
+    // Gentle urgency nudges so the auto-submit never blindsides anyone.
+    if (timeLeft === 600) setTimeToast("10 minutes left");
+    if (timeLeft === 300) setTimeToast("5 minutes left — the test submits itself at 0:00");
     const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => clearTimeout(id);
   }, [timeLeft]);
@@ -197,11 +258,26 @@ export default function ExamTake() {
       key={q.id}
       ref={(el) => { qRefs.current[q.id] = el; }}
       variant="outlined"
-      sx={{ p: 2, mb: 2, scrollMarginTop: TOPBAR_HEIGHT + 96 }}
+      sx={(t) => ({
+        p: 2, mb: 2, scrollMarginTop: TOPBAR_HEIGHT + 96,
+        ...(flags[q.id] && { borderColor: "warning.main", boxShadow: `inset 3px 0 0 ${t.palette.warning.main}` }),
+      })}
     >
-      <Typography variant="body2" fontWeight={600} gutterBottom>
-        <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>{q.prompt}
-      </Typography>
+      <Stack direction="row" alignItems="flex-start" spacing={1}>
+        <Typography variant="body2" fontWeight={600} gutterBottom sx={{ flex: 1 }}>
+          <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>{q.prompt}
+        </Typography>
+        <Tooltip title={flags[q.id] ? "Remove flag" : "Flag to review later"}>
+          <IconButton
+            size="small"
+            onClick={() => toggleFlag(q.id)}
+            color={flags[q.id] ? "warning" : "default"}
+            sx={{ mt: -0.5 }}
+          >
+            {flags[q.id] ? <FlagRoundedIcon fontSize="small" /> : <OutlinedFlagRoundedIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
+      </Stack>
 
       {q.qtype === "mcq" && (
         <RadioGroup
@@ -273,9 +349,34 @@ export default function ExamTake() {
           overflowY: sticky ? { xs: "visible", md: "auto" } : "visible",
         }}
       >
-        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-          {REF_LABEL[skill] || "MATERIAL"}
-        </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            {REF_LABEL[skill] || "MATERIAL"}
+          </Typography>
+          {hasText && (
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              {(highlights[sec.station_id] || []).length > 0 && (
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={() => setStationHighlights(sec.station_id, [])}
+                  sx={{ fontSize: 11, color: "text.secondary", textTransform: "none", minWidth: 0 }}
+                >
+                  Clear
+                </Button>
+              )}
+              <Tooltip title={highlightMode ? "Highlighter on — select text to mark it, click a mark to remove it" : "Turn on the highlighter"}>
+                <IconButton
+                  size="small"
+                  color={highlightMode ? "warning" : "default"}
+                  onClick={() => setHighlightMode((v) => !v)}
+                >
+                  <BorderColorRoundedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          )}
+        </Stack>
         {hasAudio && (
           <Box
             component="audio"
@@ -297,8 +398,25 @@ export default function ExamTake() {
           />
         )}
         {hasText && (
-          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.9 }}>
-            {sec.passage_md}
+          <Typography
+            variant="body2"
+            component="div"
+            onMouseUp={() => captureHighlight(sec.station_id)}
+            onTouchEnd={() => captureHighlight(sec.station_id)}
+            sx={{
+              lineHeight: 1.9,
+              ...(highlightMode && {
+                cursor: "text",
+                "& ::selection": { background: "rgba(255,193,7,0.4)" },
+              }),
+            }}
+          >
+            <HighlightedText
+              text={sec.passage_md}
+              sentences={highlights[sec.station_id] || []}
+              color="warning"
+              onMarkClick={highlightMode ? (t) => removeHighlight(sec.station_id, t) : undefined}
+            />
           </Typography>
         )}
         {!hasAudio && !hasImage && !hasText && (
@@ -318,7 +436,13 @@ export default function ExamTake() {
   }
   if (error && !examData) return <Alert severity="error">{error}</Alert>;
 
-  const warn = timeLeft !== null && timeLeft < 300;
+  // Timer urgency: calm → amber at 10 min → red (pulsing) at 5 min.
+  const timerColor =
+    timeLeft === null ? "text.primary"
+    : timeLeft < 300 ? "error.main"
+    : timeLeft < 600 ? "warning.main"
+    : "text.primary";
+  const flaggedCount = flatQuestions.filter((q) => flags[q.id]).length;
 
   return (
     <Box>
@@ -348,7 +472,20 @@ export default function ExamTake() {
             </Tooltip>
           )}
           {timeLeft !== null && (
-            <Typography variant="h6" fontWeight={700} color={warn ? "error" : "text.primary"}>
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              sx={{
+                color: timerColor,
+                ...(timeLeft < 300 && {
+                  "@keyframes timerPulse": {
+                    "0%, 100%": { opacity: 1 },
+                    "50%": { opacity: 0.55 },
+                  },
+                  animation: "timerPulse 1.6s ease-in-out infinite",
+                }),
+              }}
+            >
               {fmt(timeLeft)}
             </Typography>
           )}
@@ -370,6 +507,15 @@ export default function ExamTake() {
             <Typography variant="body2" fontWeight={600}>
               {answeredCount} / {flatQuestions.length} answered
             </Typography>
+            {flaggedCount > 0 && (
+              <Chip
+                size="small"
+                color="warning"
+                variant="outlined"
+                icon={<FlagRoundedIcon />}
+                label={`${flaggedCount} flagged`}
+              />
+            )}
             <Box sx={{ flexGrow: 1, ml: 1 }}>
               <LinearProgress
                 variant="determinate"
@@ -382,14 +528,16 @@ export default function ExamTake() {
           <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
             {flatQuestions.map((q) => {
               const done = isAnswered(q);
+              const flagged = !!flags[q.id];
               return (
                 <Chip
                   key={q.id}
                   label={qNumber[q.id]}
                   size="small"
                   onClick={() => jumpTo(q.id)}
-                  color={done ? "success" : "default"}
-                  variant={done ? "filled" : "outlined"}
+                  icon={flagged ? <FlagRoundedIcon sx={{ fontSize: 13 }} /> : undefined}
+                  color={flagged ? "warning" : done ? "success" : "default"}
+                  variant={done || flagged ? "filled" : "outlined"}
                   sx={{ minWidth: 34, cursor: "pointer" }}
                 />
               );
@@ -446,6 +594,14 @@ export default function ExamTake() {
           {submitting ? "Submitting…" : "Submit Test"}
         </Button>
       </Box>
+
+      <Snackbar
+        open={!!timeToast}
+        autoHideDuration={6000}
+        onClose={() => setTimeToast("")}
+        message={timeToast}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      />
     </Box>
   );
 }

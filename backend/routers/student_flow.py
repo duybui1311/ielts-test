@@ -325,6 +325,7 @@ def get_results(
                 "is_auto_correct": ans.is_auto_correct if ans else None,
                 "explanation": q.explanation,
                 "support_sentences": q.support_sentences or [],
+                "paraphrases": q.paraphrases or [],
             })
 
         sections.append({
