@@ -44,8 +44,13 @@ def test_finalize_writing_section_is_explain_only():
 
 
 def test_validate_usable_defaults_name_and_rejects_empty():
-    ok = _validate_usable({"name": "  ", "sections": [{"skill": "reading", "questions": []}]})
+    ok = _validate_usable({"name": "  ", "sections": [
+        {"skill": "reading", "questions": [{"qtype": "short", "prompt": "Q1"}]}]})
     assert ok["name"] == "Imported test"
     with pytest.raises(HTTPException) as exc:
         _validate_usable({"name": "X", "sections": []})
+    assert exc.value.status_code == 422
+    # Sections without a single question are just as unusable in the builder.
+    with pytest.raises(HTTPException) as exc:
+        _validate_usable({"name": "X", "sections": [{"skill": "reading", "questions": []}]})
     assert exc.value.status_code == 422

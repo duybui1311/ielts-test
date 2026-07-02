@@ -126,7 +126,7 @@ const FAQ_GROUPS = [
       },
       {
         q: "Can I import a test from a file?",
-        a: "Yes. In Create Exam, choose Import from file (AI), upload a PDF, Word document or image, and the AI converts it into the builder for you to review and adjust before saving.",
+        a: "Yes. In Create Exam, choose Import from file (AI), upload a PDF, Word document or image, and the AI converts it into the builder for you to review and adjust before saving. If you also attach the test's answer sheet, the AI fills every correct answer straight from the key instead of solving the test itself — much more accurate for auto-grading.",
       },
       {
         q: "How do I grade Writing and Speaking?",

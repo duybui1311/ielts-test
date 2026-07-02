@@ -107,6 +107,7 @@ export default function CreateNewExam() {
   // AI import dialog
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
+  const [importAnswerFile, setImportAnswerFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
 
@@ -117,6 +118,7 @@ export default function CreateNewExam() {
     try {
       const fd = new FormData();
       fd.append("file", importFile);
+      if (importAnswerFile) fd.append("answer_sheet", importAnswerFile);
       const res = await fetch(`${API_BASE}/api/import/ai`, {
         method: "POST",
         headers: authHeaders(),
@@ -131,6 +133,7 @@ export default function CreateNewExam() {
       if (secs.length) setSections(secs);
       setImportOpen(false);
       setImportFile(null);
+      setImportAnswerFile(null);
       setToast("Imported — review and edit, then Save.");
     } catch (e) {
       setImportError(e.message);
@@ -609,24 +612,50 @@ export default function CreateNewExam() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Upload a PDF, Word doc, or image of an IELTS test. The AI converts it into
             editable sections and questions — you review and edit before saving.
+            If you also have the answer sheet, add it too: the AI then takes every
+            correct answer from it instead of solving the test itself.
           </Typography>
 
           {importError && <Alert severity="warning" sx={{ mb: 2 }}>{importError}</Alert>}
 
-          <Button
-            component="label"
-            variant="outlined"
-            startIcon={<UploadFileRoundedIcon />}
-            disabled={importing}
-          >
-            {importFile ? importFile.name : "Choose file"}
-            <input
-              hidden
-              type="file"
-              accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
-              onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportError(""); }}
-            />
-          </Button>
+          <Stack spacing={1.5} alignItems="flex-start">
+            <Button
+              component="label"
+              variant="outlined"
+              startIcon={<UploadFileRoundedIcon />}
+              disabled={importing}
+            >
+              {importFile ? importFile.name : "Choose test file"}
+              <input
+                hidden
+                type="file"
+                accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportError(""); }}
+              />
+            </Button>
+
+            <Button
+              component="label"
+              variant="outlined"
+              color="secondary"
+              startIcon={<UploadFileRoundedIcon />}
+              disabled={importing}
+            >
+              {importAnswerFile ? importAnswerFile.name : "Answer sheet (optional)"}
+              <input
+                hidden
+                type="file"
+                accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                onChange={(e) => { setImportAnswerFile(e.target.files?.[0] || null); setImportError(""); }}
+              />
+            </Button>
+            {importAnswerFile && (
+              <Button size="small" color="inherit" disabled={importing}
+                onClick={() => setImportAnswerFile(null)}>
+                Remove answer sheet
+              </Button>
+            )}
+          </Stack>
 
           {importing && (
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 2 }}>
