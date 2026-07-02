@@ -72,6 +72,7 @@ TEST_TOOL = {
             "name": {"type": "string", "description": "Title of the whole test"},
             "difficulty": {"type": "string", "enum": ["low", "medium", "high"]},
             "time_limit_min": {"type": "integer"},
+            "source_question_count": {"type": "integer", "description": "The total number of questions printed in the source material (count the numbered items before extracting; a 'Choose TWO letters' task counts as ONE)."},
             "sections": {
                 "type": "array",
                 "items": {
@@ -150,7 +151,13 @@ SYSTEM = (
     "EVERY question in a writing or speaking section must be 'explain'.\n"
     "4. Set `sub_skill` for every reading/listening question, choosing the single best "
     f"fit from this exact list (no other values): {', '.join(SUB_SKILLS)}.\n"
-    "5. Keep questions in their original order. Number nothing in the prompt text "
+    "5. COMPLETENESS IS CRITICAL. Before extracting, count every question printed in "
+    "the material and put that number in source_question_count (a 'Choose TWO letters' "
+    "task counts as one). Then output EVERY question — never skip, merge or summarise "
+    "numbered items, even when they look repetitive, span page breaks, sit inside "
+    "tables/note templates, or continue after an instruction box. If a question is "
+    "partly illegible, still output it with your best reading of the prompt.\n"
+    "5b. Keep questions in their original order. Number nothing in the prompt text "
     "itself — the position is enough.\n"
     "6. Answers: if a separate ANSWER SHEET document is supplied, it is the authoritative "
     "source — match its answers to questions by question number and make every "
@@ -288,12 +295,22 @@ def _finalize(result: dict) -> dict:
                     q.pop("correct_indices", None)
                     q.pop("select_count", None)
                     ci = q.get("correct_index")
-                    q["correct_index"] = ci if isinstance(ci, int) and 0 <= ci < len(opts) else 0
+                    ok = isinstance(ci, int) and 0 <= ci < len(opts)
+                    # Don't hide a missing answer behind a silent default — the
+                    # builder shows these questions as "needs answer".
+                    q["answer_missing"] = not ok
+                    q["correct_index"] = ci if ok else 0
+                else:
+                    q["answer_missing"] = False
             else:
                 q.pop("options", None)
                 q.pop("correct_index", None)
                 q.pop("correct_indices", None)
                 q.pop("select_count", None)
+                if qtype == "short":
+                    accepts = [str(a).strip() for a in (q.get("accept_answers") or []) if str(a).strip()]
+                    q["accept_answers"] = accepts
+                    q["answer_missing"] = not accepts
             q["qformat"] = qformat
 
             # Keep sub_skill within the closed analytics vocab.
@@ -383,7 +400,8 @@ def _gemini_truncated(resp) -> bool:
 
 def _validate_usable(result: dict) -> dict:
     """Reject an empty/unusable parse with a clear message instead of handing the
-    builder a blank test. Fills a default name if the model omitted one."""
+    builder a blank test. Fills a default name if the model omitted one, and adds
+    an `import_summary` so the teacher can verify completeness and answers."""
     if not (str(result.get("name") or "").strip()):
         result["name"] = "Imported test"
     sections = result.get("sections") or []
@@ -394,6 +412,20 @@ def _validate_usable(result: dict) -> dict:
             "uploaded the test paper itself (not just an answer sheet) and that the "
             "pages are legible.",
         )
+
+    total = 0
+    missing = []  # global question numbers with no answer from the paper/key
+    for sec in sections:
+        for q in sec.get("questions") or []:
+            total += 1
+            if q.get("answer_missing"):
+                missing.append(total)
+    src = result.pop("source_question_count", None)
+    result["import_summary"] = {
+        "total_questions": total,
+        "source_question_count": src if isinstance(src, int) and src > 0 else None,
+        "missing_answers": missing,
+    }
     return result
 
 
