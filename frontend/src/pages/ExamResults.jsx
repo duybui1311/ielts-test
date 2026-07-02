@@ -29,6 +29,10 @@ const SectionPassage = forwardRef(function SectionPassage({ passage, sentences }
   const [open, setOpen] = useState(false);
   const bodyRef = useRef(null);
   const pendingRef = useRef(null);
+  // Sentences from explanations generated AFTER page load (on-demand) aren't in
+  // the initial `sentences` prop — locate() adds them here so they still get a
+  // mark to jump to.
+  const [extraSentences, setExtraSentences] = useState([]);
 
   const flashMark = (sentence) => {
     const target = normalizeFragment(sentence);
@@ -51,25 +55,28 @@ const SectionPassage = forwardRef(function SectionPassage({ passage, sentences }
 
   useImperativeHandle(ref, () => ({
     locate(sentence) {
-      if (open) {
-        flashMark(sentence);
-      } else {
-        // Open first; flash once the collapse has rendered the marks.
-        pendingRef.current = sentence;
-        setOpen(true);
-      }
+      pendingRef.current = sentence;
+      setExtraSentences((xs) =>
+        xs.some((x) => normalizeFragment(x) === normalizeFragment(sentence)) ? xs : [...xs, sentence]
+      );
+      setOpen(true);
+      // Flash after the collapse transition / re-render has painted the mark.
+      setTimeout(() => {
+        if (pendingRef.current && flashMark(pendingRef.current)) pendingRef.current = null;
+      }, 380);
     },
   }));
 
   useEffect(() => {
     if (open && pendingRef.current) {
       const sentence = pendingRef.current;
-      pendingRef.current = null;
-      // Wait for the Collapse transition so scrollIntoView lands correctly.
-      const t = setTimeout(() => flashMark(sentence), 320);
+      // Second chance once React has rendered the extra sentence's mark.
+      const t = setTimeout(() => {
+        if (flashMark(sentence)) pendingRef.current = null;
+      }, 320);
       return () => clearTimeout(t);
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, extraSentences]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!passage || !passage.trim()) return null;
   return (
@@ -91,7 +98,7 @@ const SectionPassage = forwardRef(function SectionPassage({ passage, sentences }
             border: `1px solid ${t.palette.divider}`, bgcolor: "background.default",
           })}
         >
-          <HighlightedText text={passage} sentences={sentences} />
+          <HighlightedText text={passage} sentences={[...sentences, ...extraSentences]} />
         </Box>
       </Collapse>
     </Box>
