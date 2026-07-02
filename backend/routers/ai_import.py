@@ -1,13 +1,15 @@
-"""AI test importer — convert an uploaded test (PDF / Word / image) into the
-site's exam format.
+"""AI test importer — convert an uploaded test (PDF / Word / image / text) into
+the site's exam format, optionally alongside a separate answer sheet that the
+model must treat as the authoritative source of correct answers.
 
 Providers (selected with the LLM_PROVIDER env var, default "gemini"):
 - "gemini" — Google Gemini via the google-genai SDK. Free online option and
   multimodal: PDFs and images are sent as raw bytes (Gemini reads charts,
   scanned pages and layout natively, so we do NOT pre-extract text). Needs
   GEMINI_API_KEY; GEMINI_MODEL defaults to "gemini-2.5-flash".
-- "claude" — Anthropic Claude via tool-use. Images are sent as base64; other
-  files have their text extracted locally first. Needs ANTHROPIC_API_KEY.
+- "claude" — Anthropic Claude via tool-use. Images and PDFs are sent as base64
+  (PDFs as native document blocks, so scans work); other files have their text
+  extracted locally first. Needs ANTHROPIC_API_KEY.
 - "local" — no external API. Extracts text locally and returns it as a single
   reading section for the teacher to finish by hand. Useful offline / for tests.
 
@@ -107,8 +109,12 @@ SYSTEM = (
     f"fit from this exact list (no other values): {', '.join(SUB_SKILLS)}.\n"
     "5. Keep questions in their original order. Number nothing in the prompt text "
     "itself — the position is enough.\n"
-    "6. If an answer key is present, use it. If not, leave correct_index/accept_answers "
-    "empty rather than guessing.\n"
+    "6. Answers: if a separate ANSWER SHEET document is supplied, it is the authoritative "
+    "source — match its answers to questions by question number and make every "
+    "correct_index / accept_answers agree with it exactly, even if you would have answered "
+    "differently from the test alone. If there is no answer sheet but a key is printed "
+    "inside the test material, use that. If no key exists anywhere, leave "
+    "correct_index/accept_answers empty rather than guessing.\n"
     "7. Preserve the original wording of prompts and options; fix only obvious OCR errors.\n"
     "8. MATCHING tasks (matching headings, matching information/features/endings, and any "
     "task where students pick from ONE shared list such as a box of headings i-x or a list "
@@ -152,7 +158,7 @@ _GEMINI_SCHEMA = _to_gemini_schema(TEST_TOOL["input_schema"])
 
 
 
-def _extract_text(filename: str, data: bytes) -> str:
+def _extract_text(filename: str, data: bytes, content_type: str = "") -> str:
     name = (filename or "").lower()
     if name.endswith(".pdf"):
         from pypdf import PdfReader  # lazy
@@ -161,7 +167,19 @@ def _extract_text(filename: str, data: bytes) -> str:
     if name.endswith(".docx"):
         from docx import Document  # lazy (python-docx)
         doc = Document(io.BytesIO(data))
-        return "\n".join(p.text for p in doc.paragraphs).strip()
+        parts = [p.text for p in doc.paragraphs]
+        # Word tests often keep questions/answer keys in tables — don't drop them.
+        for table in doc.tables:
+            for row in table.rows:
+                parts.append(" | ".join(cell.text.strip() for cell in row.cells))
+        return "\n".join(parts).strip()
+    if name.endswith(".doc"):
+        raise HTTPException(
+            400,
+            "Legacy .doc files aren't supported. Re-save the file as .docx or PDF and try again.",
+        )
+    if name.endswith((".txt", ".md")) or (content_type or "").startswith("text/"):
+        return data.decode("utf-8", errors="replace").strip()
     return ""
 
 
@@ -218,9 +236,54 @@ def _finalize(result: dict) -> dict:
     return result
 
 
+def _require_questions(result: dict) -> dict:
+    """Reject AI output with no usable content so the teacher gets a clear error
+    instead of an empty builder."""
+    sections = result.get("sections") or []
+    if not sections or not any(sec.get("questions") for sec in sections):
+        raise HTTPException(
+            422,
+            "The AI couldn't find any questions in that file. Check that you uploaded "
+            "the test paper itself (not just an answer sheet) and that the pages are legible.",
+        )
+    return result
+
+
 # --- Providers -------------------------------------------------------------
 
-def _run_gemini(file: UploadFile, data: bytes) -> dict:
+def _gemini_file_parts(types, file: UploadFile, data: bytes, label: str) -> list:
+    """Build Gemini content parts for one uploaded file: raw bytes for images and
+    PDFs (multimodal — no OCR), locally-extracted text for everything else."""
+    name = (file.filename or "").lower()
+    ctype = file.content_type or ""
+    if _is_image(name, ctype):
+        media_type = ctype if ctype.startswith("image/") else "image/png"
+        return [types.Part.from_bytes(data=data, mime_type=media_type)]
+    if ctype == "application/pdf" or name.endswith(".pdf"):
+        return [types.Part.from_bytes(data=data, mime_type="application/pdf")]
+    try:
+        text = _extract_text(file.filename or "", data, ctype)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"Could not read '{file.filename}': {e}")
+    if not text:
+        raise HTTPException(
+            400,
+            f"No readable text found in '{file.filename}'. For scanned/handwritten "
+            "material, upload a PDF or image instead.",
+        )
+    return [types.Part.from_text(text=f"{label}:\n\n{text}")]
+
+
+ANSWER_SHEET_NOTE = (
+    "The next document is the ANSWER SHEET (answer key) for the test above. It is "
+    "the authoritative source of answers: match each answer to its question number "
+    "and fill correct_index / accept_answers from it exactly."
+)
+
+
+def _run_gemini(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None) -> dict:
     if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(
             503,
@@ -236,31 +299,10 @@ def _run_gemini(file: UploadFile, data: bytes) -> dict:
             "AI import dependencies are missing. Run: pip install -r backend/requirements.txt",
         )
 
-    name = (file.filename or "").lower()
-    ctype = file.content_type or ""
-    is_pdf = ctype == "application/pdf" or name.endswith(".pdf")
-
-    parts = []
-    if _is_image(name, ctype):
-        # Multimodal: hand the raw image to Gemini, no OCR.
-        media_type = ctype if ctype.startswith("image/") else "image/png"
-        parts.append(types.Part.from_bytes(data=data, mime_type=media_type))
-    elif is_pdf:
-        # Multimodal: hand the raw PDF to Gemini so it reads charts/scans/layout.
-        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
-    else:
-        text = ""
-        try:
-            text = _extract_text(file.filename or "", data)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, f"Could not read the file: {e}")
-        if not text:
-            raise HTTPException(
-                400,
-                "No readable text found. For scanned/handwritten tests, upload a PDF or image instead.",
-            )
-        parts.append(types.Part.from_text(text=f"Test material:\n\n{text}"))
-
+    parts = _gemini_file_parts(types, file, data, "Test material")
+    if answers is not None:
+        parts.append(types.Part.from_text(text=ANSWER_SHEET_NOTE))
+        parts.extend(_gemini_file_parts(types, answers[0], answers[1], "Answer sheet"))
     parts.append(types.Part.from_text(text="Convert this IELTS test into the structured JSON format."))
 
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -309,10 +351,43 @@ def _run_gemini(file: UploadFile, data: bytes) -> dict:
         result = json.loads(raw)
     except json.JSONDecodeError:
         raise HTTPException(502, "The AI returned malformed data. Try again or use a clearer file.")
-    return _finalize(result)
+    return _require_questions(_finalize(result))
 
 
-def _run_claude(file: UploadFile, data: bytes) -> dict:
+def _claude_file_blocks(file: UploadFile, data: bytes, label: str) -> list:
+    """Build Claude content blocks for one uploaded file: base64 image/document
+    blocks for images and PDFs (so scans work), extracted text for the rest."""
+    name = (file.filename or "").lower()
+    ctype = file.content_type or ""
+    if _is_image(name, ctype):
+        media_type = ctype if ctype.startswith("image/") else "image/png"
+        return [{
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type,
+                       "data": base64.standard_b64encode(data).decode()},
+        }]
+    if ctype == "application/pdf" or name.endswith(".pdf"):
+        return [{
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf",
+                       "data": base64.standard_b64encode(data).decode()},
+        }]
+    try:
+        text = _extract_text(file.filename or "", data, ctype)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"Could not read '{file.filename}': {e}")
+    if not text:
+        raise HTTPException(
+            400,
+            f"No readable text found in '{file.filename}'. For scanned/handwritten "
+            "material, upload a PDF or image instead.",
+        )
+    return [{"type": "text", "text": f"{label}:\n\n{text}"}]
+
+
+def _run_claude(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None) -> dict:
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise HTTPException(
             503,
@@ -327,36 +402,17 @@ def _run_claude(file: UploadFile, data: bytes) -> dict:
             "AI import dependencies are missing. Run: pip install -r backend/requirements.txt",
         )
 
-    name = (file.filename or "").lower()
-    ctype = file.content_type or ""
-
-    user_content = []
-    if _is_image(name, ctype):
-        media_type = ctype if ctype.startswith("image/") else "image/png"
-        user_content.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": media_type,
-                       "data": base64.standard_b64encode(data).decode()},
-        })
-        user_content.append({"type": "text", "text": "Convert this IELTS test image into the structured format."})
-    else:
-        text = ""
-        try:
-            text = _extract_text(file.filename or "", data)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, f"Could not read the file: {e}")
-        if not text:
-            raise HTTPException(
-                400,
-                "No readable text found. For scanned/handwritten tests, upload an image instead.",
-            )
-        user_content.append({"type": "text", "text": f"Convert this IELTS test into the structured format:\n\n{text}"})
+    user_content = _claude_file_blocks(file, data, "Test material")
+    if answers is not None:
+        user_content.append({"type": "text", "text": ANSWER_SHEET_NOTE})
+        user_content.extend(_claude_file_blocks(answers[0], answers[1], "Answer sheet"))
+    user_content.append({"type": "text", "text": "Convert this IELTS test into the structured format."})
 
     client = anthropic.Anthropic()
     try:
         resp = client.messages.create(
             model=MODEL,
-            max_tokens=8000,
+            max_tokens=32000,
             system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
             tools=[TEST_TOOL],
             tool_choice={"type": "tool", "name": "build_ielts_test"},
@@ -367,14 +423,12 @@ def _run_claude(file: UploadFile, data: bytes) -> dict:
 
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and block.name == "build_ielts_test":
-            return _finalize(block.input)
+            return _require_questions(_finalize(block.input))
 
     raise HTTPException(502, "The AI did not return a usable test. Try a clearer file.")
 
 
-def _run_local(file: UploadFile, data: bytes) -> dict:
-    """No-API fallback: extract text and drop it into one reading section so the
-    teacher can build questions by hand."""
+def _local_text(file: UploadFile, data: bytes) -> str:
     name = (file.filename or "").lower()
     ctype = file.content_type or ""
     if _is_image(name, ctype):
@@ -383,16 +437,27 @@ def _run_local(file: UploadFile, data: bytes) -> dict:
             "The local importer cannot read images. Set LLM_PROVIDER=gemini for "
             "image/scanned tests, or upload a PDF/Word file.",
         )
-    text = ""
     try:
-        text = _extract_text(file.filename or "", data)
+        text = _extract_text(file.filename or "", data, ctype)
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(400, f"Could not read the file: {e}")
+        raise HTTPException(400, f"Could not read '{file.filename}': {e}")
     if not text:
         raise HTTPException(
             400,
             "No readable text found. Set LLM_PROVIDER=gemini to read scanned/image tests.",
         )
+    return text
+
+
+def _run_local(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None) -> dict:
+    """No-API fallback: extract text and drop it into one reading section so the
+    teacher can build questions by hand. An answer sheet, if given, is appended
+    so the teacher can copy answers in while building."""
+    text = _local_text(file, data)
+    if answers is not None:
+        text += "\n\n---\n\n## Answer sheet\n\n" + _local_text(answers[0], answers[1])
     return _finalize({
         "name": file.filename or "Imported test",
         "sections": [{
@@ -407,9 +472,25 @@ def _run_local(file: UploadFile, data: bytes) -> dict:
 _PROVIDERS = {"gemini": _run_gemini, "claude": _run_claude, "local": _run_local}
 
 
+async def _read_upload(file: UploadFile) -> bytes:
+    # Read one byte past the limit so we can detect (and reject) oversized files
+    # without loading the whole upload into memory.
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            413,
+            f"'{file.filename}' is too large. The maximum upload size is "
+            f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
+    if not data:
+        raise HTTPException(400, f"The uploaded file '{file.filename}' is empty.")
+    return data
+
+
 @router.post("/ai")
 async def ai_import(
     file: UploadFile = File(...),
+    answer_sheet: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_role("teacher", "admin")),
 ):
@@ -421,15 +502,8 @@ async def ai_import(
             f"Unknown LLM_PROVIDER '{provider}'. Use 'gemini', 'claude', or 'local'.",
         )
 
-    # Read one byte past the limit so we can detect (and reject) oversized files
-    # without loading the whole upload into memory.
-    data = await file.read(MAX_UPLOAD_BYTES + 1)
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            413,
-            f"File is too large. The maximum upload size is "
-            f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-        )
-    if not data:
-        raise HTTPException(400, "The uploaded file is empty.")
-    return run(file, data)
+    data = await _read_upload(file)
+    answers = None
+    if answer_sheet is not None and (answer_sheet.filename or "").strip():
+        answers = (answer_sheet, await _read_upload(answer_sheet))
+    return run(file, data, answers)
