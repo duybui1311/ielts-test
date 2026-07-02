@@ -34,15 +34,32 @@ from backend.service.database import get_db
 from backend.service import models
 from backend.service.auth_deps import require_role
 from backend.service.subskills import SUB_SKILLS
+from backend.service.ratelimit import rate_limit
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
-MODEL = "claude-sonnet-4-6"
+# Guard the paid LLM import: 10 uploads/min per user.
+_ai_limiter = rate_limit(10, 60)
+
+# Anthropic model for the `claude` import provider. Override with ANTHROPIC_MODEL.
+MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 # Cap the uploaded test file so a huge upload can't exhaust server memory. We
 # read at most MAX_UPLOAD_BYTES + 1 bytes, so an oversized file is rejected
 # without ever being fully loaded.
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
+# Full IELTS tests are long. Too small an output-token ceiling truncates the JSON
+# and the parse fails, so give the models plenty of room (overridable via env).
+GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "65536"))
+CLAUDE_MAX_OUTPUT_TOKENS = int(os.getenv("CLAUDE_MAX_OUTPUT_TOKENS", "16000"))
+# Per-request timeout so a hung LLM call can't tie up a worker indefinitely.
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
+# Substrings that mark a retryable/transient upstream error.
+_TRANSIENT_KEYS = (
+    "503", "529", "unavailable", "overloaded", "high demand",
+    "429", "rate limit", "resource_exhausted", "timeout", "deadline",
+)
 
 # Tool schema the model must fill — mirrors tests_io.TestIn so the result can be
 # saved directly through POST /api/tests/import after teacher review.
@@ -236,15 +253,69 @@ def _finalize(result: dict) -> dict:
     return result
 
 
-def _require_questions(result: dict) -> dict:
-    """Reject AI output with no usable content so the teacher gets a clear error
-    instead of an empty builder."""
+def _call_with_retries(fn):
+    """Call an LLM request `fn`, retrying transient errors (429/503/529/overloaded)
+    with backoff. Raises a friendly HTTPException on give-up."""
+    last_err = None
+    for attempt in range(4):
+        try:
+            return fn()
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if any(k in str(e).lower() for k in _TRANSIENT_KEYS) and attempt < 3:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            break
+    m = str(last_err).lower()
+    if any(k in m for k in _TRANSIENT_KEYS):
+        raise HTTPException(
+            503,
+            "The AI service is busy right now (high demand). Please wait a few "
+            "seconds and try Convert again.",
+        )
+    raise HTTPException(502, f"AI service error: {last_err}")
+
+
+def _loads_json(raw: str) -> dict:
+    """Parse model JSON, tolerating ```json fences or stray text around the object."""
+    raw = (raw or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw[:4].lower() == "json":
+            raw = raw[4:]
+        raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        i, j = raw.find("{"), raw.rfind("}")
+        if i != -1 and j > i:
+            return json.loads(raw[i:j + 1])
+        raise
+
+
+def _gemini_truncated(resp) -> bool:
+    """True if Gemini stopped because it hit the output-token ceiling."""
+    try:
+        fr = resp.candidates[0].finish_reason
+    except (AttributeError, IndexError, TypeError):
+        return False
+    return str(getattr(fr, "name", fr) or "").upper() == "MAX_TOKENS"
+
+
+def _validate_usable(result: dict) -> dict:
+    """Reject an empty/unusable parse with a clear message instead of handing the
+    builder a blank test. Fills a default name if the model omitted one."""
+    if not (str(result.get("name") or "").strip()):
+        result["name"] = "Imported test"
     sections = result.get("sections") or []
     if not sections or not any(sec.get("questions") for sec in sections):
         raise HTTPException(
             422,
-            "The AI couldn't find any questions in that file. Check that you uploaded "
-            "the test paper itself (not just an answer sheet) and that the pages are legible.",
+            "The AI couldn't find any test questions in that file. Check that you "
+            "uploaded the test paper itself (not just an answer sheet) and that the "
+            "pages are legible.",
         )
     return result
 
@@ -305,53 +376,42 @@ def _run_gemini(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes]
         parts.extend(_gemini_file_parts(types, answers[0], answers[1], "Answer sheet"))
     parts.append(types.Part.from_text(text="Convert this IELTS test into the structured JSON format."))
 
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    try:
+        client = genai.Client(
+            api_key=os.getenv("GEMINI_API_KEY"),
+            http_options=types.HttpOptions(timeout=int(LLM_TIMEOUT_SECONDS * 1000)),
+        )
+    except Exception:  # noqa: BLE001 — older SDKs may not accept http_options
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     cfg = types.GenerateContentConfig(
         system_instruction=SYSTEM,
         response_mime_type="application/json",
         response_schema=_GEMINI_SCHEMA,
         temperature=0,  # deterministic: same file -> same structured test
+        max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,  # full tests are long — avoid truncation
     )
 
-    # Gemini's free tier returns transient 503 (UNAVAILABLE) / 429 spikes —
-    # retry a few times with backoff before surfacing a friendly error.
-    resp = None
-    last_err = None
-    for attempt in range(4):
-        try:
-            resp = client.models.generate_content(model=model, contents=parts, config=cfg)
-            last_err = None
-            break
-        except Exception as e:  # noqa: BLE001
-            last_err = e
-            msg = str(e).lower()
-            transient = any(k in msg for k in (
-                "503", "unavailable", "overloaded", "high demand",
-                "429", "rate limit", "resource_exhausted", "timeout", "deadline",
-            ))
-            if transient and attempt < 3:
-                time.sleep(1.5 * (attempt + 1))
-                continue
-            break
-    if last_err is not None:
-        m = str(last_err).lower()
-        if any(k in m for k in ("503", "unavailable", "overloaded", "high demand", "429", "rate limit", "resource_exhausted")):
-            raise HTTPException(
-                503,
-                "The AI service is busy right now (high demand). Please wait a few "
-                "seconds and try Convert again.",
-            )
-        raise HTTPException(502, f"AI service error: {last_err}")
+    # Gemini's free tier returns transient 503/429 spikes — retry with backoff.
+    resp = _call_with_retries(
+        lambda: client.models.generate_content(model=model, contents=parts, config=cfg)
+    )
+
+    if _gemini_truncated(resp):
+        raise HTTPException(
+            502,
+            "That test is too large to import in one go. Split it into separate "
+            "reading/listening files and import each, then combine in the builder.",
+        )
 
     raw = (resp.text or "").strip()
     if not raw:
         raise HTTPException(502, "The AI did not return a usable test. Try a clearer file.")
     try:
-        result = json.loads(raw)
+        result = _loads_json(raw)
     except json.JSONDecodeError:
         raise HTTPException(502, "The AI returned malformed data. Try again or use a clearer file.")
-    return _require_questions(_finalize(result))
+    return _validate_usable(_finalize(result))
 
 
 def _claude_file_blocks(file: UploadFile, data: bytes, label: str) -> list:
@@ -408,22 +468,26 @@ def _run_claude(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes]
         user_content.extend(_claude_file_blocks(answers[0], answers[1], "Answer sheet"))
     user_content.append({"type": "text", "text": "Convert this IELTS test into the structured format."})
 
-    client = anthropic.Anthropic()
-    try:
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=32000,
-            system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
-            tools=[TEST_TOOL],
-            tool_choice={"type": "tool", "name": "build_ielts_test"},
-            messages=[{"role": "user", "content": user_content}],
+    client = anthropic.Anthropic(timeout=LLM_TIMEOUT_SECONDS)
+    resp = _call_with_retries(lambda: client.messages.create(
+        model=MODEL,
+        max_tokens=CLAUDE_MAX_OUTPUT_TOKENS,
+        system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
+        tools=[TEST_TOOL],
+        tool_choice={"type": "tool", "name": "build_ielts_test"},
+        messages=[{"role": "user", "content": user_content}],
+    ))
+
+    if getattr(resp, "stop_reason", None) == "max_tokens":
+        raise HTTPException(
+            502,
+            "That test is too large to import in one go. Split it into separate "
+            "files and import each, then combine in the builder.",
         )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"AI service error: {e}")
 
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and block.name == "build_ielts_test":
-            return _require_questions(_finalize(block.input))
+            return _validate_usable(_finalize(block.input))
 
     raise HTTPException(502, "The AI did not return a usable test. Try a clearer file.")
 
@@ -493,6 +557,7 @@ async def ai_import(
     answer_sheet: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_role("teacher", "admin")),
+    _rl: None = Depends(_ai_limiter),
 ):
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
     run = _PROVIDERS.get(provider)

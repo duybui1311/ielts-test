@@ -6,6 +6,7 @@ feature). The result is cached on the Question row so each question is only ever
 explained once.
 """
 import os
+import re
 import json
 from fastapi import HTTPException
 
@@ -44,6 +45,27 @@ def _correct_answer_text(question) -> str:
         return "(no answer key)"
     accepts = question.accept_answers or []
     return ", ".join(str(a) for a in accepts) if accepts else "(no answer key)"
+
+
+def _appears_in_passage(sentence: str, passage: str) -> bool:
+    """Whitespace-tolerant, case-insensitive check that `sentence` occurs in `passage`.
+
+    Mirrors the frontend highlighter (HighlightedText.jsx): collapse runs of
+    whitespace and compare case-insensitively, ignoring trivially short fragments.
+    A support sentence we keep is therefore exactly one that can be highlighted.
+    """
+    s = re.sub(r"\s+", " ", sentence or "").strip().lower()
+    if len(s) <= 3:
+        return False
+    p = re.sub(r"\s+", " ", passage or "").lower()
+    return s in p
+
+
+def _ground_support(support_sentences, passage_md: str) -> list[str]:
+    """Drop any 'support sentence' the model returned that is not actually present
+    in the passage/transcript. This prevents fabricated citations from being shown
+    to students as verbatim supporting evidence."""
+    return [s for s in support_sentences if _appears_in_passage(s, passage_md)]
 
 
 def generate_for_question(question, passage_md: str, skill: str | None) -> dict:
@@ -104,6 +126,9 @@ def generate_for_question(question, passage_md: str, skill: str | None) -> dict:
 
     explanation = (data.get("explanation") or "").strip()
     support = [str(s).strip() for s in (data.get("support_sentences") or []) if str(s).strip()]
+    # Ground the citations: only keep support sentences that really appear in the
+    # passage, so the UI never shows fabricated "supporting evidence".
+    support = _ground_support(support, passage_md)
     if not explanation:
         raise HTTPException(502, "The AI did not return an explanation. Please try again.")
     return {"explanation": explanation, "support_sentences": support}

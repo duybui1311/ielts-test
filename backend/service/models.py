@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     Float,
     JSON,
+    Index,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -221,6 +222,7 @@ class ExamAttempt(Base):
     __tablename__ = "exam_attempts"
     __table_args__ = (
         UniqueConstraint("exam_id", "user_id", name="uq_exam_user"),
+        Index("ix_exam_attempts_user", "user_id"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     exam_id: Mapped[int] = mapped_column(ForeignKey("exams.id"), nullable=False)
@@ -439,6 +441,9 @@ class SpeakingSubmission(Base):
 
 class ErrorTag(Base):
     __tablename__ = "error_tags"
+    __table_args__ = (
+        Index("ix_error_tags_user_exam", "user_id", "exam_id"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # Exam (reading/listening) error tags fill these; AI Writing/Speaking error
     # tags leave them null (no station/exam), so they are nullable.
@@ -460,6 +465,9 @@ class ErrorTag(Base):
 class PracticeSession(Base):
     """One focused practice-by-question-type drill (not a full exam attempt)."""
     __tablename__ = "practice_sessions"
+    __table_args__ = (
+        Index("ix_practice_sessions_user", "user_id"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     sub_skill: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -474,6 +482,7 @@ class ReviewQueue(Base):
     __tablename__ = "review_queue"
     __table_args__ = (
         UniqueConstraint("user_id", "question_id", name="uq_review_user_question"),
+        Index("ix_review_queue_user_due", "user_id", "due_date"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -490,4 +499,15 @@ class ReviewHistory(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
     correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ExplanationReport(Base):
+    """A learner/teacher flag that a question's AI explanation looks wrong
+    (fabricated or incorrect). Recorded for review — the AI-quality loop."""
+    __tablename__ = "explanation_reports"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

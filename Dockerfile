@@ -13,13 +13,25 @@ WORKDIR /app
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Application code.
+# Application code + Alembic config (migration scripts live under backend/migrations).
 COPY backend ./backend
+COPY alembic.ini ./alembic.ini
 
 # Local fallback dir for the /uploads static mount (Supabase Storage is preferred).
-RUN mkdir -p backend/uploads
+# Run as a non-root user and give it ownership of the app dir (uploads must be
+# writable at runtime).
+RUN mkdir -p backend/uploads \
+    && useradd --create-home --uid 1000 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
 
-# Shell form so $PORT (set by the platform, defaulting to 8000) is expanded.
-CMD uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+# Container-level health probe (Render also uses healthCheckPath in render.yaml).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+    CMD python -c "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8000')+'/api/health', timeout=4).status==200 else 1)"
+
+# Apply DB migrations, then start the server (shell form so $PORT expands and `&&`
+# chains). A failed migration fails the deploy — Render keeps the previous version
+# live, so the app is never served against a mismatched schema.
+CMD alembic -c alembic.ini upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port $PORT
