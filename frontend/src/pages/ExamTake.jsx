@@ -2,7 +2,7 @@ import React, {
   useEffect, useState, useCallback, useRef,
 } from "react";
 import {
-  Box, Typography, Paper, RadioGroup, FormControlLabel, Radio,
+  Box, Typography, Paper,
   TextField, Button, Stack, Alert, CircularProgress, Chip, Tooltip, LinearProgress,
   IconButton, Snackbar,
 } from "@mui/material";
@@ -17,6 +17,7 @@ import { apiFetch, mediaUrl } from "../api";
 import { SkillChip } from "../component/ui";
 import { TOPBAR_HEIGHT } from "../component/TopBar";
 import HighlightedText, { normalizeFragment } from "../component/HighlightedText";
+import QuestionInput, { parsePicked } from "../component/QuestionInput";
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
@@ -245,7 +246,9 @@ export default function ExamTake() {
   flatQuestions.forEach((q, i) => { qNumber[q.id] = i + 1; });
   const isAnswered = (q) => {
     const a = answers[q.id];
-    return !!a && (a.choice_index != null || (a.value_text && a.value_text.trim() !== ""));
+    if (!a) return false;
+    if (q.qformat === "multi_select") return parsePicked(a.value_text).length > 0;
+    return a.choice_index != null || (a.value_text && a.value_text.trim() !== "");
   };
   const answeredCount = flatQuestions.filter(isAnswered).length;
 
@@ -265,7 +268,10 @@ export default function ExamTake() {
     >
       <Stack direction="row" alignItems="flex-start" spacing={1}>
         <Typography variant="body2" fontWeight={600} gutterBottom sx={{ flex: 1 }}>
-          <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>{q.prompt}
+          <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>
+          {/* Gap-fill sentences render inside the input (inline blank), so
+              don't repeat the prompt here. */}
+          {q.qformat === "gap_fill" ? null : q.prompt}
         </Typography>
         <Tooltip title={flags[q.id] ? "Remove flag" : "Flag to review later"}>
           <IconButton
@@ -279,35 +285,7 @@ export default function ExamTake() {
         </Tooltip>
       </Stack>
 
-      {q.qtype === "mcq" && (
-        <RadioGroup
-          value={answers[q.id]?.choice_index?.toString() ?? ""}
-          onChange={(e) => handleMCQ(q.id, parseInt(e.target.value, 10))}
-        >
-          {(q.options || []).map((opt, i) => (
-            <FormControlLabel
-              key={i}
-              value={i.toString()}
-              control={<Radio size="small" />}
-              label={opt}
-            />
-          ))}
-        </RadioGroup>
-      )}
-
-      {q.qtype === "short" && (
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="Type your answer…"
-          value={answers[q.id]?.value_text ?? ""}
-          onChange={(e) => handleShortChange(q.id, e.target.value)}
-          onBlur={(e) => handleShortBlur(q.id, e.target.value)}
-          sx={{ mt: 1 }}
-        />
-      )}
-
-      {q.qtype === "explain" && (
+      {q.qtype === "explain" ? (
         <TextField
           multiline
           minRows={8}
@@ -317,6 +295,23 @@ export default function ExamTake() {
           onChange={(e) => handleShortChange(q.id, e.target.value)}
           onBlur={(e) => handleShortBlur(q.id, e.target.value)}
           sx={{ mt: 1 }}
+        />
+      ) : (
+        <QuestionInput
+          question={q}
+          value={answers[q.id] || {}}
+          onChange={(patch) => {
+            if (patch.choice_index != null) {
+              handleMCQ(q.id, patch.choice_index);
+            } else if (q.qformat === "multi_select") {
+              // Checkbox picks are discrete actions — persist immediately.
+              setAnswers((a) => ({ ...a, [q.id]: { value_text: patch.value_text } }));
+              saveToDB(q.id, null, patch.value_text);
+            } else {
+              handleShortChange(q.id, patch.value_text);
+            }
+          }}
+          onCommitText={(v) => handleShortBlur(q.id, v)}
         />
       )}
     </Paper>

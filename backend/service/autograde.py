@@ -32,6 +32,24 @@ def _norm(t):
     return " ".join((t or "").strip().lower().split())
 
 
+def _multi_select_ok(answer, question) -> bool:
+    """Grade a multi_select question: the student's picked option indices
+    (stored as a JSON array in value_text) must equal the correct set."""
+    import json
+    try:
+        picked = json.loads(answer.value_text or "[]")
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(picked, list):
+        return False
+    try:
+        picked_set = {int(i) for i in picked}
+    except (ValueError, TypeError):
+        return False
+    correct = {int(i) for i in (question.correct_indices or [])}
+    return bool(correct) and picked_set == correct
+
+
 def autograde_station_attempt(db: Session, station_attempt_id: int):
     sa = db.query(StationAttempt).filter(StationAttempt.id == station_attempt_id).first()
     if not sa:
@@ -53,7 +71,9 @@ def autograde_station_attempt(db: Session, station_attempt_id: int):
         q = questions.get(a.question_id)
         if not q or q.qtype.value == "explain":   # writing -> AI later
             continue
-        if q.qtype.value == "mcq":
+        if q.qtype.value == "mcq" and q.qformat == "multi_select":
+            ok = _multi_select_ok(a, q)
+        elif q.qtype.value == "mcq":
             ok = a.choice_index is not None and a.choice_index == q.correct_index
         else:  # short
             accept = {_norm(x) for x in (q.accept_answers or [])}
