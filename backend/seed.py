@@ -2,13 +2,16 @@
 
 Run from the repo root:
 
-    python -m backend.seed
+    python -m backend.seed            # seed only if no demo content exists
+    python -m backend.seed --reset    # DELETE all tests/attempts/content (users
+                                      # are kept) and seed the fresh demo data
 
-Idempotent: if the demo accounts already exist it does nothing. Creates a demo
-teacher and student, a class, one IELTS exam (reading + listening), a couple of
-flashcard decks, and one fully graded student attempt (so the dashboard,
-analytics and history have real numbers).
+Creates a demo teacher and student, a class, one IELTS exam that shows off every
+native question format (TFNG buttons, matching dropdown, choose-two checkboxes,
+inline gap-fill), flashcard decks, and one fully graded student attempt (so the
+dashboard, analytics and history have real numbers).
 """
+import sys
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -60,28 +63,45 @@ def _user(db, *, email, username, name, role):
 
 
 # ── Exam content ────────────────────────────────────────────────────────────
-READING_PASSAGE = """The History of Tea
+READING_PASSAGE = """Why Cities Are Planting More Trees
 
-Tea is one of the most widely consumed beverages in the world, second only to
-water. According to legend, tea was first discovered by the Chinese Emperor Shen
-Nong in 2737 BCE when leaves from a wild tree blew into his pot of boiling water.
-For centuries tea remained a Chinese secret, prized both as a medicine and as a
-refreshing drink. It was not until the 9th century that a Japanese monk carried
-tea seeds home, and only in the 17th century did Dutch traders bring tea to
-Europe, where it quickly became a fashionable luxury.
+Paragraph A. City councils around the world are planting trees at record rates,
+and the reasons are practical as much as environmental. Leafy streets stay
+noticeably cooler in hot weather: measurements in Melbourne, which runs one of
+the world's best-known urban forest programmes, show that shaded streets can be
+up to four degrees cooler in summer than bare ones. Trees also clean the air,
+trapping dust and absorbing polluting gases through their leaves.
+
+Paragraph B. The benefits are not only physical. Researchers have found that
+people who live on greener streets report lower stress and are more likely to
+know their neighbours. Shops on tree-lined high streets even report more
+customers, because people walk more slowly and stay longer in the shade.
+
+Paragraph C. Planting is not free, of course. A mature street tree costs
+hundreds of pounds a year to water, prune and insure, and roots can damage
+pavements if the wrong species is chosen. Yet most economists who have studied
+urban forests conclude that the savings on air conditioning, healthcare and
+drainage comfortably outweigh the costs.
+
+List of Headings
+i. The hidden price of street trees
+ii. How trees change people's behaviour
+iii. Cooler streets, cleaner air
 """
 
-LISTENING_NOTE = """Booking a Hotel Room (transcript summary)
+LISTENING_NOTE = """Joining the City Gym (transcript summary)
 
-A traveller calls the Riverside Hotel to reserve a room. The receptionist
-confirms a double room is available for three nights at a rate of ninety pounds
-per night, including breakfast. The guest provides a credit card to hold the
-booking and is given the confirmation number RH4821.
+A student calls City Gym to ask about joining. The receptionist explains that a
+monthly membership costs twenty-five pounds and that the gym opens at six in
+the morning on weekdays. New members pay five pounds for their membership card
+and must bring one photo. The beginners' class on Tuesday evenings is taught by
+an instructor called Karen.
 """
 
 
 def _question(station_id, qtype, prompt, *, options=None, correct_index=None,
-              accept_answers=None, sub_skill=None, order=1):
+              accept_answers=None, sub_skill=None, order=1, qformat=None,
+              correct_indices=None, select_count=None):
     return models.Question(
         station_id=station_id,
         qtype=models.QuestionType(qtype),
@@ -91,6 +111,9 @@ def _question(station_id, qtype, prompt, *, options=None, correct_index=None,
         accept_answers=accept_answers,
         sub_skill=sub_skill,
         display_order=order,
+        qformat=qformat,
+        correct_indices=correct_indices,
+        select_count=select_count,
     )
 
 
@@ -111,8 +134,8 @@ def _build_exam(db, *, class_id, teacher_id):
     db.add(exam)
     db.flush()
 
-    # Reading section
-    reading_case = models.Case(title="Reading: The History of Tea",
+    # Reading section — one question of every native IELTS format.
+    reading_case = models.Case(title="Reading: Why Cities Are Planting More Trees",
                                body_md=READING_PASSAGE, created_by=teacher_id)
     db.add(reading_case)
     db.flush()
@@ -120,20 +143,34 @@ def _build_exam(db, *, class_id, teacher_id):
     db.add(reading)
     db.flush()
     db.add_all([
-        _question(reading.id, "mcq", "Who is said to have discovered tea?",
-                  options=["A Japanese monk", "Emperor Shen Nong", "Dutch traders", "A European merchant"],
+        _question(reading.id, "mcq", "Which city is named for its urban forest programme?",
+                  options=["London", "Melbourne", "Paris", "Tokyo"],
                   correct_index=1, sub_skill="multiple_choice", order=1),
-        _question(reading.id, "mcq", "When did tea arrive in Europe?",
-                  options=["9th century", "2737 BCE", "17th century", "21st century"],
-                  correct_index=2, sub_skill="multiple_choice", order=2),
-        _question(reading.id, "short", "Tea is the second most consumed drink after ____.",
-                  accept_answers=["water"], sub_skill="sentence_completion", order=3),
-        _question(reading.id, "short", "Which country first kept tea a secret?",
-                  accept_answers=["china"], sub_skill="gap_fill", order=4),
+        _question(reading.id, "mcq", "Shaded streets can be up to four degrees cooler in summer.",
+                  options=["TRUE", "FALSE", "NOT GIVEN"], correct_index=0,
+                  qformat="tfng", sub_skill="true_false_notgiven", order=2),
+        _question(reading.id, "mcq", "The passage says street trees reduce crime.",
+                  options=["TRUE", "FALSE", "NOT GIVEN"], correct_index=2,
+                  qformat="tfng", sub_skill="true_false_notgiven", order=3),
+        _question(reading.id, "mcq", "Choose the heading that best matches Paragraph B.",
+                  options=["i. The hidden price of street trees",
+                           "ii. How trees change people's behaviour",
+                           "iii. Cooler streets, cleaner air"],
+                  correct_index=1, qformat="matching", sub_skill="matching_headings", order=4),
+        _question(reading.id, "mcq", "Which TWO physical benefits of street trees are mentioned in Paragraph A?",
+                  options=["Cooler streets", "Cheaper housing", "Cleaner air",
+                           "Quieter roads", "More parking"],
+                  correct_index=0, correct_indices=[0, 2], select_count=2,
+                  qformat="multi_select", sub_skill="multiple_choice", order=5),
+        _question(reading.id, "short", "A mature street tree costs ________ of pounds a year to maintain.",
+                  accept_answers=["hundreds"], qformat="gap_fill",
+                  sub_skill="sentence_completion", order=6),
+        _question(reading.id, "short", "Who concludes that the savings outweigh the costs? (ONE WORD)",
+                  accept_answers=["economists"], sub_skill="short_answer", order=7),
     ])
 
     # Listening section
-    listening_case = models.Case(title="Listening: Booking a Hotel Room",
+    listening_case = models.Case(title="Listening: Joining the City Gym",
                                  body_md=LISTENING_NOTE, created_by=teacher_id)
     db.add(listening_case)
     db.flush()
@@ -141,16 +178,17 @@ def _build_exam(db, *, class_id, teacher_id):
     db.add(listening)
     db.flush()
     db.add_all([
-        _question(listening.id, "mcq", "How many nights does the guest book?",
-                  options=["One", "Two", "Three", "Four"],
-                  correct_index=2, sub_skill="multiple_choice", order=1),
-        _question(listening.id, "mcq", "What is included in the room rate?",
-                  options=["Dinner", "Breakfast", "Parking", "Nothing"],
-                  correct_index=1, sub_skill="multiple_choice", order=2),
-        _question(listening.id, "short", "What is the nightly rate in pounds?",
-                  accept_answers=["90", "ninety"], sub_skill="gap_fill", order=3),
-        _question(listening.id, "short", "What is the booking confirmation number?",
-                  accept_answers=["RH4821"], sub_skill="sentence_completion", order=4),
+        _question(listening.id, "mcq", "How much does a monthly membership cost?",
+                  options=["£20", "£25", "£30", "£35"],
+                  correct_index=1, sub_skill="multiple_choice", order=1),
+        _question(listening.id, "short", "On weekdays the gym opens at ________ in the morning.",
+                  accept_answers=["six", "6", "6 am", "six am"], qformat="gap_fill",
+                  sub_skill="sentence_completion", order=2),
+        _question(listening.id, "short", "The membership card costs ________ pounds.",
+                  accept_answers=["five", "5"], qformat="gap_fill",
+                  sub_skill="gap_fill", order=3),
+        _question(listening.id, "short", "What is the name of the Tuesday-class instructor?",
+                  accept_answers=["karen"], sub_skill="short_answer", order=4),
     ])
 
     db.flush()
@@ -168,8 +206,9 @@ def _attempt(db, *, exam, student_id):
     db.flush()
 
     # Deliberately wrong answers to populate mistake-pattern analytics.
-    wrong = {("reading", 2), ("listening", 4)}  # (skill, display_order)
+    wrong = {("reading", 3), ("reading", 5), ("listening", 4)}  # (skill, display_order)
 
+    import json as _json
     for station in sorted(exam.stations, key=lambda s: s.position):
         sa = models.StationAttempt(
             exam_attempt_id=ea.id, station_id=station.id,
@@ -179,7 +218,11 @@ def _attempt(db, *, exam, student_id):
         db.flush()
         for q in station.questions:
             be_wrong = (station.skill, q.display_order) in wrong
-            if q.qtype == models.QuestionType.mcq:
+            if q.qformat == "multi_select":
+                picked = [0, 1] if be_wrong else list(q.correct_indices or [])
+                db.add(models.Answer(station_attempt_id=sa.id, question_id=q.id,
+                                     value_text=_json.dumps(picked)))
+            elif q.qtype == models.QuestionType.mcq:
                 if be_wrong:
                     idx = 0 if q.correct_index != 0 else 1
                 else:
@@ -260,15 +303,36 @@ def _practice_tasks(db, *, owner_id):
     db.commit()
 
 
-def main():
+def reset_content(db):
+    """Delete every test, attempt, submission and piece of learning data —
+    user accounts are kept. Child tables first (no ON DELETE CASCADE)."""
+    for model in (
+        models.ErrorTag, models.Answer, models.StationAttempt, models.ExamAttempt,
+        models.ReviewHistory, models.ReviewQueue, models.ExplanationReport,
+        models.ExamAccessLog, models.Feedback,
+        models.Question, models.Station, models.Exam, models.Case,
+        models.WritingComment, models.WritingSubmission, models.SpeakingSubmission,
+        models.WritingTask, models.SpeakingTask,
+        models.PracticeSession,
+        models.FlashcardReview, models.Flashcard, models.FlashcardDeck,
+        models.ClassEnrolment, models.Class,
+    ):
+        db.query(model).delete(synchronize_session=False)
+    db.commit()
+    print("All old tests, attempts and content removed (user accounts kept).")
+
+
+def main(reset: bool = False):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         ensure_admin(db)
+        if reset:
+            reset_content(db)
         existing_teacher = db.query(models.User).filter(models.User.email == TEACHER_EMAIL).first()
-        if existing_teacher:
+        if existing_teacher and not reset and db.query(models.Exam).first():
             _practice_tasks(db, owner_id=existing_teacher.id)
-            print("Demo data already present — ensured practice tasks.")
+            print("Demo data already present — ensured practice tasks. (Use --reset to replace it.)")
             print(f"  Admin:   {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
             print(f"  Teacher: {TEACHER_EMAIL} / {PASSWORD}")
             print(f"  Student: {STUDENT_EMAIL} / {PASSWORD}")
@@ -301,4 +365,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(reset="--reset" in sys.argv)

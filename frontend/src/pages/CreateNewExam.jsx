@@ -39,6 +39,7 @@ function aiToSections(result) {
       qformat: q.qformat || "",
       correct_indices: Array.isArray(q.correct_indices) ? q.correct_indices : [],
       select_count: Number.isInteger(q.select_count) ? q.select_count : 2,
+      answer_missing: !!q.answer_missing,
     })),
   }));
 }
@@ -71,6 +72,22 @@ const FORMATS_BY_QTYPE = {
   ],
 };
 const FIXED_OPTIONS = { tfng: ["TRUE", "FALSE", "NOT GIVEN"], ynng: ["YES", "NO", "NOT GIVEN"] };
+
+/** Compact display of a question's answer, for the section answer-key summary. */
+function answerSummary(q) {
+  const letter = (i) => String.fromCharCode(65 + i);
+  if (q.qtype === "explain") return "manual marking";
+  if (q.answer_missing) return "⚠ needs answer";
+  if (q.qformat === "multi_select") {
+    return (q.correct_indices || []).map(letter).join(", ") || "⚠ needs answer";
+  }
+  if (q.qtype === "mcq") {
+    const opt = (q.options || [])[q.correct_index];
+    if (q.qformat === "tfng" || q.qformat === "ynng") return opt || "?";
+    return opt ? `${letter(q.correct_index)} — ${String(opt).slice(0, 40)}` : "?";
+  }
+  return q.accept_answers || "⚠ needs answer";
+}
 
 let _uid = 0;
 const uid = () => ++_uid;
@@ -129,6 +146,8 @@ export default function CreateNewExam() {
   const [importAnswerFile, setImportAnswerFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+  // Post-import verification: totals + questions the AI couldn't answer.
+  const [importReview, setImportReview] = useState(null);
 
   const runImport = async () => {
     if (!importFile) { setImportError("Choose a file first."); return; }
@@ -150,6 +169,7 @@ export default function CreateNewExam() {
       if (data.time_limit_min) setTimeLimit(data.time_limit_min);
       const secs = aiToSections(data);
       if (secs.length) setSections(secs);
+      setImportReview(data.import_summary || null);
       setImportOpen(false);
       setImportFile(null);
       setImportAnswerFile(null);
@@ -432,6 +452,38 @@ export default function CreateNewExam() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 
+      {/* Post-import verification: did the AI get everything, and which answers
+          still need the teacher's eyes? */}
+      {importReview && (
+        <Alert
+          severity={
+            (importReview.missing_answers || []).length > 0 ||
+            (importReview.source_question_count &&
+              importReview.source_question_count !== importReview.total_questions)
+              ? "warning" : "success"
+          }
+          sx={{ mb: 2 }}
+          onClose={() => setImportReview(null)}
+        >
+          <strong>{importReview.total_questions} questions imported</strong>
+          {importReview.source_question_count != null && (
+            importReview.source_question_count === importReview.total_questions
+              ? <> — matches the {importReview.source_question_count} the paper shows.</>
+              : <> — but the paper shows <strong>{importReview.source_question_count}</strong>.
+                  Compare against the original and add whatever is missing.</>
+          )}
+          {(importReview.missing_answers || []).length > 0 && (
+            <Box sx={{ mt: 0.5 }}>
+              No answer could be read for <strong>Q{importReview.missing_answers.join(", Q")}</strong> —
+              they're marked "needs answer" below. Set them before saving (or re-import with the answer sheet attached).
+            </Box>
+          )}
+          <Box sx={{ mt: 0.5 }}>
+            Tip: open "Answer key" on each section header to compare every answer with the official key at a glance.
+          </Box>
+        </Alert>
+      )}
+
       {/* Test details (collapsible) */}
       <Card sx={{ p: 3, mb: 3 }}>
         <Stack
@@ -473,6 +525,11 @@ export default function CreateNewExam() {
             <Chip label={`Section ${sec.position}`} color="primary" size="small" />
             <SkillChip skill={sec.skill} />
             <Box sx={{ flexGrow: 1 }} />
+            {!isProductive(sec.skill) && (
+              <Button size="small" variant="text" onClick={() => updateSection(si, { showKey: !sec.showKey })}>
+                {sec.showKey ? "Hide answer key" : "Answer key"}
+              </Button>
+            )}
             <IconButton size="small" onClick={() => updateSection(si, { open: !sec.open })}>
               <ExpandMoreRoundedIcon sx={{ transform: sec.open ? "rotate(180deg)" : "none", transition: "0.2s" }} />
             </IconButton>
@@ -480,6 +537,26 @@ export default function CreateNewExam() {
               <DeleteOutlineRoundedIcon />
             </IconButton>
           </Stack>
+
+          {sec.showKey && (
+            <Box
+              sx={(t) => ({
+                mb: 2, p: 1.5, borderRadius: 2, border: "1px dashed", borderColor: "divider",
+                bgcolor: t.palette.mode === "dark" ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                display: "flex", flexWrap: "wrap", gap: 0.75,
+              })}
+            >
+              {sec.questions.map((q, qi) => (
+                <Chip
+                  key={q.key}
+                  size="small"
+                  color={q.answer_missing ? "warning" : "default"}
+                  variant="outlined"
+                  label={`Q${sections.slice(0, si).reduce((n, s) => n + s.questions.length, 0) + qi + 1}: ${answerSummary(q)}`}
+                />
+              ))}
+            </Box>
+          )}
 
           <Collapse in={sec.open}>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
@@ -543,6 +620,9 @@ export default function CreateNewExam() {
               <Box key={q.key} sx={{ p: 2, mb: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
                   <Typography variant="body2" fontWeight={600}>Q{qi + 1}</Typography>
+                  {q.answer_missing && (
+                    <Chip size="small" color="warning" label="needs answer — not found in the paper/key" />
+                  )}
                   <Box sx={{ flexGrow: 1 }} />
                   <IconButton size="small" color="error" disabled={sec.questions.length === 1} onClick={() => removeQuestion(si, qi)}>
                     <DeleteOutlineRoundedIcon fontSize="small" />
@@ -608,6 +688,7 @@ export default function CreateNewExam() {
                           onChange={() => {
                             const cur = q.correct_indices || [];
                             updateQuestion(si, qi, {
+                              answer_missing: false,
                               correct_indices: cur.includes(oi)
                                 ? cur.filter((x) => x !== oi)
                                 : [...cur, oi].sort((a, b) => a - b),
@@ -634,7 +715,7 @@ export default function CreateNewExam() {
                     </Typography>
                     <RadioGroup
                       value={String(q.correct_index)}
-                      onChange={(e) => updateQuestion(si, qi, { correct_index: Number(e.target.value) })}
+                      onChange={(e) => updateQuestion(si, qi, { correct_index: Number(e.target.value), answer_missing: false })}
                     >
                       {q.options.map((opt, oi) => (
                         <Stack key={oi} direction="row" alignItems="center" spacing={1}>
@@ -660,7 +741,7 @@ export default function CreateNewExam() {
                     label="Accepted answers (comma-separated)"
                     placeholder="e.g. water, H2O"
                     value={q.accept_answers}
-                    onChange={(e) => updateQuestion(si, qi, { accept_answers: e.target.value })}
+                    onChange={(e) => updateQuestion(si, qi, { accept_answers: e.target.value, answer_missing: false })}
                   />
                 )}
 
