@@ -106,6 +106,7 @@ function Drill({ subSkill }) {
   const [result, setResult] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [round, setRound] = React.useState(0); // bump to fetch a fresh set in place
 
   React.useEffect(() => {
     setData(null); setAnswers({}); setResult(null); setError("");
@@ -117,7 +118,12 @@ function Drill({ subSkill }) {
       })
       .then(setData)
       .catch((e) => setError(e.message));
-  }, [subSkill]);
+  }, [subSkill, round]);
+
+  const tryMore = () => {
+    setRound((n) => n + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const submit = async () => {
     setSubmitting(true);
@@ -176,7 +182,7 @@ function Drill({ subSkill }) {
               <Typography variant="h5" fontWeight={800} color={result.correct / result.total >= 0.6 ? "success.main" : "error.main"}>
                 {result.correct}/{result.total}
               </Typography>
-              <Button variant="contained" onClick={() => window.location.reload()}>
+              <Button variant="contained" onClick={tryMore}>
                 Try more
               </Button>
             </Stack>

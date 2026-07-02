@@ -22,17 +22,26 @@ _explain_limiter = rate_limit(20, 60)
 _teacher = require_role("teacher", "admin")
 
 
-def _question_payload(q: models.Question) -> dict:
+def _question_payload(q: models.Question, mistake_note: str = "") -> dict:
     return {
         "id": q.id,
         "explanation": q.explanation,
         "support_sentences": q.support_sentences or [],
+        "paraphrases": q.paraphrases or [],
+        "mistake_note": mistake_note,
     }
+
+
+class ExplainIn(BaseModel):
+    # The student's own (incorrect) answer. When present, the response includes a
+    # personalized `mistake_note` addressing that specific answer.
+    student_answer: Optional[str] = None
 
 
 @router.post("/{question_id}/explain")
 def explain_question(
     question_id: int,
+    payload: Optional[ExplainIn] = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
     _rl: None = Depends(_explain_limiter),
@@ -41,8 +50,12 @@ def explain_question(
     if not q:
         raise HTTPException(404, "Question not found")
 
-    # Already cached — return it (generate once).
-    if q.explanation:
+    student_answer = (payload.student_answer or "").strip() if payload else ""
+
+    # Cached and nothing personalized to add — return it (generate once).
+    # Questions explained before the paraphrase feature regenerate once to
+    # backfill the paraphrase map.
+    if q.explanation and q.paraphrases is not None and not student_answer:
         return _question_payload(q)
 
     # Only auto-gradable Reading/Listening questions get explanations.
@@ -54,11 +67,17 @@ def explain_question(
     passage = station.case.body_md if station and station.case else ""
     skill = station.skill if station else None
 
-    result = generate_for_question(q, passage, skill)
-    q.explanation = result["explanation"]
-    q.support_sentences = result["support_sentences"]
+    result = generate_for_question(q, passage, skill, student_answer or None)
+    # Cache the generic parts on the question; the mistake note is per-student
+    # and returned fresh, never cached. Keep an existing (possibly teacher-
+    # reviewed) explanation over a regenerated one.
+    if not q.explanation:
+        q.explanation = result["explanation"]
+        q.support_sentences = result["support_sentences"]
+    if q.paraphrases is None:
+        q.paraphrases = result["paraphrases"]
     db.commit()
-    return _question_payload(q)
+    return _question_payload(q, mistake_note=result["mistake_note"])
 
 
 class ReportIn(BaseModel):

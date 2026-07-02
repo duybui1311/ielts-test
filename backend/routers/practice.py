@@ -155,6 +155,7 @@ def practice_submit(
             "correct_answer": correct_answer,
             "explanation": q.explanation,
             "support_sentences": q.support_sentences or [],
+            "paraphrases": q.paraphrases or [],
         })
 
     total = len(results)

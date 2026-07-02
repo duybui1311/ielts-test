@@ -93,6 +93,18 @@ TEST_TOOL = {
                                     "sub_skill": {"type": "string", "enum": SUB_SKILLS, "description": "Question category from the fixed list"},
                                     "explanation": {"type": "string", "description": "For reading/listening questions: 2-3 plain-language sentences on why the correct answer is correct, briefly noting why a common wrong choice is a trap."},
                                     "support_sentences": {"type": "array", "items": {"type": "string"}, "description": "For reading/listening questions: the exact sentence(s) copied verbatim from passage_md that justify the answer."},
+                                    "paraphrases": {
+                                        "type": "array",
+                                        "description": "For reading/listening questions: 1-3 wording pairs showing how the question rephrases the passage.",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "question_phrase": {"type": "string", "description": "Short phrase from the question or correct option"},
+                                                "passage_phrase": {"type": "string", "description": "The corresponding phrase copied verbatim from passage_md"},
+                                            },
+                                            "required": ["question_phrase", "passage_phrase"],
+                                        },
+                                    },
                                 },
                                 "required": ["qtype", "prompt"],
                             },
@@ -147,8 +159,11 @@ SYSTEM = (
     "blanks like '________ (3)'. Never omit a heading list, option box, or instruction line.\n"
     "10. For every reading and listening question, also fill `explanation` (2-3 plain "
     "sentences on why the correct answer is correct, noting why a common wrong choice is a "
-    "trap) and `support_sentences` (the exact sentence(s) copied verbatim from passage_md "
-    "that justify the answer). Leave both empty for writing/speaking questions."
+    "trap), `support_sentences` (the exact sentence(s) copied verbatim from passage_md "
+    "that justify the answer) and `paraphrases` (1-3 pairs showing how the question "
+    "rephrases the passage: question_phrase from the question/correct option, "
+    "passage_phrase copied VERBATIM from passage_md). Leave all three empty for "
+    "writing/speaking questions."
 )
 
 
@@ -239,6 +254,7 @@ def _finalize(result: dict) -> dict:
                 q.pop("sub_skill", None)
                 q.pop("explanation", None)
                 q.pop("support_sentences", None)
+                q.pop("paraphrases", None)
             else:
                 if q.get("sub_skill") not in SUB_SKILLS:
                     q["sub_skill"] = "multiple_choice" if qtype == "mcq" else "short_answer"
@@ -250,6 +266,20 @@ def _finalize(result: dict) -> dict:
                     [str(s).strip() for s in supp if str(s).strip()]
                     if isinstance(supp, list) else None
                 )
+                paras = q.get("paraphrases")
+                q["paraphrases"] = (
+                    [
+                        {
+                            "question_phrase": str(p.get("question_phrase") or "").strip(),
+                            "passage_phrase": str(p.get("passage_phrase") or "").strip(),
+                        }
+                        for p in paras
+                        if isinstance(p, dict)
+                        and str(p.get("question_phrase") or "").strip()
+                        and str(p.get("passage_phrase") or "").strip()
+                    ][:3]
+                    if isinstance(paras, list) else None
+                ) or None
     return result
 
 

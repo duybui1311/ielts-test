@@ -141,6 +141,9 @@ export default function QuestionStem({
           questionId={question.id}
           explanation={result.explanation}
           supportSentences={result.support_sentences}
+          paraphrases={result.paraphrases}
+          studentAnswer={result.your_answer}
+          wasWrong={result.is_correct === false}
         />
       )}
     </Paper>
