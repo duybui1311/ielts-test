@@ -30,6 +30,8 @@ def _question_out(q: models.Question) -> dict:
     return {
         "id": q.id,
         "qtype": q.qtype.value,
+        "qformat": q.qformat,
+        "select_count": q.select_count if q.qformat == "multi_select" else None,
         "prompt": q.prompt,
         "options": q.options_json or [] if q.qtype.value == "mcq" else [],
         "sub_skill": q.sub_skill,
@@ -133,7 +135,18 @@ def practice_submit(
         if not q:
             continue
         opts = q.options_json or []
-        if q.qtype.value == "mcq":
+        if q.qformat == "multi_select":
+            import json as _json
+            try:
+                picked = _json.loads(a.value_text or "[]")
+                picked = [int(i) for i in picked] if isinstance(picked, list) else []
+            except (ValueError, TypeError):
+                picked = []
+            correct_set = {int(i) for i in (q.correct_indices or [])}
+            ok = bool(correct_set) and set(picked) == correct_set
+            your_answer = ", ".join(opts[i] for i in sorted(picked) if 0 <= i < len(opts)) or None
+            correct_answer = ", ".join(opts[i] for i in sorted(correct_set) if 0 <= i < len(opts)) or None
+        elif q.qtype.value == "mcq":
             ok = a.choice_index is not None and a.choice_index == q.correct_index
             your_answer = opts[a.choice_index] if (a.choice_index is not None and a.choice_index < len(opts)) else None
             correct_answer = opts[q.correct_index] if (q.correct_index is not None and q.correct_index < len(opts)) else None

@@ -88,6 +88,9 @@ class QuestionIn(BaseModel):
     explanation: Optional[str] = None           # learning-feature: why the answer is correct
     support_sentences: Optional[List[str]] = None  # passage sentence(s) supporting it
     paraphrases: Optional[List[dict]] = None    # [{question_phrase, passage_phrase}]
+    qformat: Optional[Literal["tfng", "ynng", "matching", "multi_select", "gap_fill"]] = None
+    correct_indices: Optional[List[int]] = None  # multi_select answer set
+    select_count: Optional[int] = None           # picks required for multi_select
 
 
 class SectionIn(BaseModel):
@@ -169,6 +172,9 @@ def import_test(
                 explanation=q.explanation,
                 support_sentences=q.support_sentences,
                 paraphrases=q.paraphrases,
+                qformat=q.qformat,
+                correct_indices=q.correct_indices,
+                select_count=q.select_count,
             ))
     db.commit()
     return {"exam_id": exam.id, "sections": len(payload.sections)}
@@ -265,6 +271,9 @@ def _replace_sections(db: Session, exam: models.Exam, sections: List[SectionIn])
                 explanation=q.explanation,
                 support_sentences=q.support_sentences,
                 paraphrases=q.paraphrases,
+                qformat=q.qformat,
+                correct_indices=q.correct_indices,
+                select_count=q.select_count,
             ))
     exam.total_stations = len(sections)
 
@@ -368,6 +377,9 @@ def export_test(
                 "explanation": q.explanation,
                 "support_sentences": q.support_sentences,
                 "paraphrases": q.paraphrases,
+                "qformat": q.qformat,
+                "correct_indices": q.correct_indices,
+                "select_count": q.select_count,
             } for q in st.questions],
         })
     return out

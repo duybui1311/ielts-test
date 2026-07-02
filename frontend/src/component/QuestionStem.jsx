@@ -1,6 +1,6 @@
 import * as React from "react";
 import {
-  Box, Paper, Typography, RadioGroup, FormControlLabel, Radio, TextField,
+  Box, Paper, Typography,
   Button, Collapse, Stack, Chip, alpha,
 } from "@mui/material";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
@@ -9,6 +9,7 @@ import MenuBookRoundedIcon from "@mui/icons-material/MenuBookRounded";
 import { mediaUrl } from "../api";
 import { SkillChip } from "./ui";
 import ExplanationPanel from "./ExplanationPanel";
+import QuestionInput from "./QuestionInput";
 
 /**
  * A single drillable question — shared by the Practice and Review pages. Renders
@@ -100,35 +101,18 @@ export default function QuestionStem({
         />
       )}
 
-      <Typography variant="body1" fontWeight={600} sx={{ mb: 1 }}>
-        {question.prompt}
-      </Typography>
-
-      {question.qtype === "mcq" ? (
-        <RadioGroup
-          value={value.choice_index != null ? String(value.choice_index) : ""}
-          onChange={(e) => onChange?.({ choice_index: parseInt(e.target.value, 10) })}
-        >
-          {(question.options || []).map((opt, i) => (
-            <FormControlLabel
-              key={i}
-              value={String(i)}
-              disabled={graded}
-              control={<Radio size="small" />}
-              label={opt}
-            />
-          ))}
-        </RadioGroup>
-      ) : (
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="Type your answer…"
-          value={value.value_text ?? ""}
-          disabled={graded}
-          onChange={(e) => onChange?.({ value_text: e.target.value })}
-        />
+      {question.qformat !== "gap_fill" && (
+        <Typography variant="body1" fontWeight={600} sx={{ mb: 1 }}>
+          {question.prompt}
+        </Typography>
       )}
+
+      <QuestionInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={graded}
+      />
 
       {graded && !result.is_correct && result.correct_answer && (
         <Typography variant="body2" color="success.main" sx={{ mt: 1 }}>

@@ -86,9 +86,12 @@ TEST_TOOL = {
                                 "type": "object",
                                 "properties": {
                                     "qtype": {"type": "string", "enum": ["mcq", "short", "explain"]},
+                                    "qformat": {"type": "string", "enum": ["tfng", "ynng", "matching", "multi_select", "gap_fill"], "description": "IELTS display format: tfng=True/False/Not Given, ynng=Yes/No/Not Given, matching=pick from a shared list, multi_select=choose N letters, gap_fill=complete the blank. Omit for plain multiple choice / short answer."},
                                     "prompt": {"type": "string"},
                                     "options": {"type": "array", "items": {"type": "string"}, "description": "MCQ options"},
                                     "correct_index": {"type": "integer", "description": "0-based index of the correct MCQ option"},
+                                    "correct_indices": {"type": "array", "items": {"type": "integer"}, "description": "multi_select only: 0-based indices of ALL correct options"},
+                                    "select_count": {"type": "integer", "description": "multi_select only: how many options the student must choose"},
                                     "accept_answers": {"type": "array", "items": {"type": "string"}, "description": "Accepted answers for short questions"},
                                     "sub_skill": {"type": "string", "enum": SUB_SKILLS, "description": "Question category from the fixed list"},
                                     "explanation": {"type": "string", "description": "For reading/listening questions: 2-3 plain-language sentences on why the correct answer is correct, briefly noting why a common wrong choice is a trap."},
@@ -126,12 +129,23 @@ SYSTEM = (
     "or listening transcript verbatim in passage_md. For writing/speaking sections, "
     "put the task instructions (and any chart description) in passage_md.\n"
     "2. Set each section's skill to one of: reading, listening, writing, speaking.\n"
-    "3. Question types (qtype):\n"
-    "   - 'mcq' for multiple choice: include every option in `options` and the 0-based "
-    "`correct_index` of the right answer.\n"
-    "   - 'short' for gap-fill, sentence/summary completion, short-answer and "
-    "True/False/Not Given: put all acceptable answers (including synonyms and "
-    "British/American spellings) in `accept_answers`.\n"
+    "3. Question types (qtype) and display formats (qformat) — match the official "
+    "computer-based IELTS exactly:\n"
+    "   - True/False/Not Given: qtype 'mcq', qformat 'tfng', options exactly "
+    "['TRUE', 'FALSE', 'NOT GIVEN'], correct_index from the key. Yes/No/Not Given: "
+    "the same with qformat 'ynng' and options ['YES', 'NO', 'NOT GIVEN'].\n"
+    "   - Multiple choice with ONE answer: qtype 'mcq', no qformat; every option in "
+    "`options`, 0-based `correct_index`.\n"
+    "   - 'Choose TWO/THREE letters' (several answers from one list): qtype 'mcq', "
+    "qformat 'multi_select', all options in `options`, ALL correct 0-based indices in "
+    "`correct_indices`, and `select_count` = how many must be chosen. Output the task "
+    "ONCE as a single question — do not repeat it per answer.\n"
+    "   - Gap-fill / sentence / summary / note / table completion: qtype 'short', "
+    "qformat 'gap_fill'. Put the sentence containing the blank in `prompt`, writing the "
+    "blank as underscores like '________'. All acceptable answers (synonyms, "
+    "British/American spellings) go in `accept_answers`.\n"
+    "   - Other short answers (e.g. 'answer in NO MORE THAN TWO WORDS' questions): "
+    "qtype 'short', no qformat, answers in `accept_answers`.\n"
     "   - 'explain' for Writing and Speaking tasks and any essay/extended answer. "
     "EVERY question in a writing or speaking section must be 'explain'.\n"
     "4. Set `sub_skill` for every reading/listening question, choosing the single best "
@@ -147,10 +161,10 @@ SYSTEM = (
     "7. Preserve the original wording of prompts and options; fix only obvious OCR errors.\n"
     "8. MATCHING tasks (matching headings, matching information/features/endings, and any "
     "task where students pick from ONE shared list such as a box of headings i-x or a list "
-    "of names): output EACH item as an 'mcq' question whose `options` are the FULL shared "
-    "list, in the original order, so the student can see and choose every choice. Set "
-    "sub_skill to 'matching_headings'. Put the shared list (e.g. 'List of Headings') in "
-    "passage_md as well so nothing is lost.\n"
+    "of names): output EACH item as an 'mcq' question with qformat 'matching' whose "
+    "`options` are the FULL shared list, in the original order (the site renders them as "
+    "a dropdown). Set sub_skill to 'matching_headings'. Put the shared list (e.g. 'List "
+    "of Headings') in passage_md as well so nothing is lost.\n"
     "9. Capture EVERYTHING the student needs to answer. Include in passage_md (using simple "
     "markdown) every piece of student-facing material that is not itself a numbered "
     "question: task instructions and word limits, lists of headings, word banks / boxes of "
@@ -240,14 +254,47 @@ def _finalize(result: dict) -> dict:
                 qtype = "short"
             q["qtype"] = qtype
 
+            # Display format: keep it coherent with the question type.
+            qformat = (q.get("qformat") or "").lower() or None
+            if qformat not in ("tfng", "ynng", "matching", "multi_select", "gap_fill"):
+                qformat = None
+            if qtype == "short" and qformat not in (None, "gap_fill"):
+                qformat = None
+            if qtype == "mcq" and qformat == "gap_fill":
+                qformat = None
+
             if qtype == "mcq":
                 opts = [o for o in (q.get("options") or []) if str(o).strip()]
+                # TFNG/YNNG always use the fixed three options, whatever the model sent.
+                if qformat == "tfng":
+                    opts = ["TRUE", "FALSE", "NOT GIVEN"]
+                elif qformat == "ynng":
+                    opts = ["YES", "NO", "NOT GIVEN"]
                 q["options"] = opts
-                ci = q.get("correct_index")
-                q["correct_index"] = ci if isinstance(ci, int) and 0 <= ci < len(opts) else 0
+                if qformat == "multi_select":
+                    idxs = sorted({
+                        int(i) for i in (q.get("correct_indices") or [])
+                        if isinstance(i, (int, float)) and 0 <= int(i) < len(opts)
+                    })
+                    if len(idxs) < 2:
+                        # Not really a multi-select — fall back to plain MCQ.
+                        qformat = None
+                    else:
+                        q["correct_indices"] = idxs
+                        sc = q.get("select_count")
+                        q["select_count"] = sc if isinstance(sc, int) and sc >= 2 else len(idxs)
+                        q["correct_index"] = idxs[0]  # harmless fallback for old clients
+                if qformat != "multi_select":
+                    q.pop("correct_indices", None)
+                    q.pop("select_count", None)
+                    ci = q.get("correct_index")
+                    q["correct_index"] = ci if isinstance(ci, int) and 0 <= ci < len(opts) else 0
             else:
                 q.pop("options", None)
                 q.pop("correct_index", None)
+                q.pop("correct_indices", None)
+                q.pop("select_count", None)
+            q["qformat"] = qformat
 
             # Keep sub_skill within the closed analytics vocab.
             if qtype == "explain":

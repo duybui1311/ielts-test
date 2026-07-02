@@ -41,6 +41,7 @@ def _build_content(exam, attempt_id, db):
             entry = {
                 "id": q.id,
                 "qtype": q.qtype.value,
+                "qformat": q.qformat,
                 "prompt": q.prompt,
                 "display_order": q.display_order,
                 "sub_skill": q.sub_skill,
@@ -48,6 +49,8 @@ def _build_content(exam, attempt_id, db):
             }
             if q.qtype.value == "mcq":
                 entry["options"] = q.options_json or []
+                if q.qformat == "multi_select":
+                    entry["select_count"] = q.select_count or len(q.correct_indices or []) or 2
             questions.append(entry)
         sections.append({
             "station_id": station.id,
@@ -294,7 +297,24 @@ def get_results(
                 .first()
             )
             opts = q.options_json or []
-            if ans and ans.choice_index is not None:
+
+            def _opts_at(indices):
+                out = []
+                for i in indices or []:
+                    try:
+                        out.append(str(opts[int(i)]))
+                    except (ValueError, TypeError, IndexError):
+                        pass
+                return ", ".join(out) or None
+
+            if q.qformat == "multi_select":
+                import json as _json
+                try:
+                    picked = _json.loads(ans.value_text or "[]") if ans else []
+                except (ValueError, TypeError):
+                    picked = []
+                student_answer = _opts_at(picked if isinstance(picked, list) else [])
+            elif ans and ans.choice_index is not None:
                 student_answer = (
                     opts[ans.choice_index] if ans.choice_index < len(opts)
                     else str(ans.choice_index)
@@ -304,7 +324,9 @@ def get_results(
             else:
                 student_answer = None
 
-            if q.qtype.value == "mcq" and q.correct_index is not None:
+            if q.qformat == "multi_select":
+                correct_answer = _opts_at(q.correct_indices)
+            elif q.qtype.value == "mcq" and q.correct_index is not None:
                 correct_answer = (
                     opts[q.correct_index] if q.correct_index < len(opts) else None
                 )
@@ -317,6 +339,7 @@ def get_results(
             questions_out.append({
                 "id": q.id,
                 "qtype": q.qtype.value,
+                "qformat": q.qformat,
                 "prompt": q.prompt,
                 "sub_skill": q.sub_skill,
                 "options": opts,

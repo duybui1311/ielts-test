@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Button, TextField, MenuItem, IconButton,
-  Divider, Radio, RadioGroup, FormControlLabel, Alert, Snackbar, Chip,
+  Divider, Radio, RadioGroup, FormControlLabel, Alert, Snackbar, Chip, Checkbox,
   Collapse, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
@@ -36,6 +36,9 @@ function aiToSections(result) {
       correct_index: Number.isInteger(q.correct_index) ? q.correct_index : 0,
       accept_answers: Array.isArray(q.accept_answers) ? q.accept_answers.join(", ") : "",
       sub_skill: q.sub_skill || subDefault(q.qtype),
+      qformat: q.qformat || "",
+      correct_indices: Array.isArray(q.correct_indices) ? q.correct_indices : [],
+      select_count: Number.isInteger(q.select_count) ? q.select_count : 2,
     })),
   }));
 }
@@ -53,6 +56,21 @@ const SUB_SKILLS = [
   "multiple_choice", "gap_fill", "true_false_notgiven",
   "matching_headings", "sentence_completion", "short_answer",
 ];
+// Display formats: how the question renders on the student's test screen.
+const FORMATS_BY_QTYPE = {
+  mcq: [
+    { value: "", label: "Standard (radio buttons)" },
+    { value: "tfng", label: "True / False / Not Given" },
+    { value: "ynng", label: "Yes / No / Not Given" },
+    { value: "matching", label: "Matching (dropdown list)" },
+    { value: "multi_select", label: "Choose N letters (checkboxes)" },
+  ],
+  short: [
+    { value: "", label: "Standard (text box)" },
+    { value: "gap_fill", label: "Gap-fill (inline blank)" },
+  ],
+};
+const FIXED_OPTIONS = { tfng: ["TRUE", "FALSE", "NOT GIVEN"], ynng: ["YES", "NO", "NOT GIVEN"] };
 
 let _uid = 0;
 const uid = () => ++_uid;
@@ -61,6 +79,7 @@ const newQuestion = () => ({
   key: uid(), qtype: "mcq", prompt: "",
   options: ["", "", "", ""], correct_index: 0,
   accept_answers: "", sub_skill: "multiple_choice",
+  qformat: "", correct_indices: [], select_count: 2,
 });
 const newSection = (position) => ({
   key: uid(), position, skill: "reading", title: "", passage_md: "",
@@ -71,9 +90,9 @@ const isProductive = (skill) => skill === "writing" || skill === "speaking";
 
 // One-click question presets for the streamlined builder.
 const QUESTION_PRESETS = {
-  mcq:     { qtype: "mcq",     sub_skill: "multiple_choice", options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "" },
-  short:   { qtype: "short",   sub_skill: "gap_fill",        options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "" },
-  explain: { qtype: "explain", sub_skill: "short_answer",    options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "" },
+  mcq:     { qtype: "mcq",     sub_skill: "multiple_choice", options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "", correct_indices: [], select_count: 2 },
+  short:   { qtype: "short",   sub_skill: "gap_fill",        options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "gap_fill", correct_indices: [], select_count: 2 },
+  explain: { qtype: "explain", sub_skill: "short_answer",    options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "", correct_indices: [], select_count: 2 },
 };
 const presetQuestion = (type) => ({ key: uid(), ...QUESTION_PRESETS[type] });
 
@@ -283,6 +302,10 @@ export default function CreateNewExam() {
         }
         if (q.qtype === "short" && !q.accept_answers.trim())
           return "Short-answer questions need at least one accepted answer.";
+        if (q.qformat === "multi_select" && (q.correct_indices || []).length < 2)
+          return "Choose-N questions need at least two correct options ticked.";
+        if (q.qformat === "gap_fill" && !/_{3,}/.test(q.prompt))
+          return "Gap-fill prompts need a blank written as underscores, e.g. 'filtered through ________ plates'.";
       }
     }
     return "";
@@ -320,10 +343,16 @@ export default function CreateNewExam() {
           };
           if (q.qtype === "mcq") {
             const options = q.options.map((o) => o.trim()).filter(Boolean);
-            return { ...base, options, correct_index: Math.min(q.correct_index, options.length - 1) };
+            const out = { ...base, options, correct_index: Math.min(q.correct_index, options.length - 1), qformat: q.qformat || null };
+            if (q.qformat === "multi_select") {
+              out.correct_indices = (q.correct_indices || []).filter((i) => i < options.length);
+              out.select_count = Number(q.select_count) || out.correct_indices.length || 2;
+              out.correct_index = out.correct_indices[0] ?? 0;
+            }
+            return out;
           }
           if (q.qtype === "short") {
-            return { ...base, accept_answers: q.accept_answers.split(",").map((a) => a.trim()).filter(Boolean) };
+            return { ...base, qformat: q.qformat || null, accept_answers: q.accept_answers.split(",").map((a) => a.trim()).filter(Boolean) };
           }
           return base; // explain
         }),
@@ -523,23 +552,86 @@ export default function CreateNewExam() {
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
                   <TextField
                     select label="Type" value={q.qtype}
-                    onChange={(e) => updateQuestion(si, qi, { qtype: e.target.value })}
+                    onChange={(e) => updateQuestion(si, qi, { qtype: e.target.value, qformat: "" })}
                     disabled={isProductive(sec.skill)}
                     helperText={isProductive(sec.skill) ? "Writing/Speaking answers are marked manually" : undefined}
                   >
                     {QTYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                   </TextField>
                   {q.qtype !== "explain" && (
+                    <TextField
+                      select label="Format (how students answer)"
+                      value={q.qformat || ""}
+                      onChange={(e) => {
+                        const f = e.target.value;
+                        const patch = { qformat: f };
+                        if (FIXED_OPTIONS[f]) patch.options = [...FIXED_OPTIONS[f]];
+                        updateQuestion(si, qi, patch);
+                      }}
+                    >
+                      {(FORMATS_BY_QTYPE[q.qtype] || []).map((f) => (
+                        <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
+                      ))}
+                    </TextField>
+                  )}
+                  {q.qtype !== "explain" && (
                     <TextField select label="Sub-skill" value={q.sub_skill} onChange={(e) => updateQuestion(si, qi, { sub_skill: e.target.value })}>
                       {SUB_SKILLS.map((s) => <MenuItem key={s} value={s}>{s.replace(/_/g, " ")}</MenuItem>)}
                     </TextField>
                   )}
-                  <TextField label="Prompt" value={q.prompt} onChange={(e) => updateQuestion(si, qi, { prompt: e.target.value })} sx={{ gridColumn: { sm: "1 / -1" } }} />
+                  <TextField
+                    label={q.qformat === "gap_fill" ? "Sentence with the blank as underscores" : "Prompt"}
+                    placeholder={q.qformat === "gap_fill" ? "e.g. Whales filter food through ________ plates." : undefined}
+                    value={q.prompt}
+                    onChange={(e) => updateQuestion(si, qi, { prompt: e.target.value })}
+                    sx={{ gridColumn: { sm: "1 / -1" } }}
+                  />
                 </Box>
 
-                {q.qtype === "mcq" && (
+                {q.qtype === "mcq" && q.qformat === "multi_select" && (
                   <Box sx={{ mt: 1.5 }}>
-                    <Typography variant="caption" color="text.secondary">Options (select the correct one)</Typography>
+                    <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">Options (tick every correct one)</Typography>
+                      <TextField
+                        size="small" type="number" label="Students choose"
+                        value={q.select_count}
+                        onChange={(e) => updateQuestion(si, qi, { select_count: Math.max(2, Number(e.target.value) || 2) })}
+                        inputProps={{ min: 2 }}
+                        sx={{ width: 130 }}
+                      />
+                    </Stack>
+                    {q.options.map((opt, oi) => (
+                      <Stack key={oi} direction="row" alignItems="center" spacing={1}>
+                        <Checkbox
+                          size="small"
+                          checked={(q.correct_indices || []).includes(oi)}
+                          onChange={() => {
+                            const cur = q.correct_indices || [];
+                            updateQuestion(si, qi, {
+                              correct_indices: cur.includes(oi)
+                                ? cur.filter((x) => x !== oi)
+                                : [...cur, oi].sort((a, b) => a - b),
+                            });
+                          }}
+                        />
+                        <TextField
+                          size="small" fullWidth placeholder={`Option ${oi + 1}`}
+                          value={opt} onChange={(e) => updateOption(si, qi, oi, e.target.value)}
+                          sx={{ my: 0.5 }}
+                        />
+                      </Stack>
+                    ))}
+                    <Button size="small" startIcon={<AddRoundedIcon />} onClick={() => addOption(si, qi)}>Add option</Button>
+                  </Box>
+                )}
+
+                {q.qtype === "mcq" && q.qformat !== "multi_select" && (
+                  <Box sx={{ mt: 1.5 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {q.qformat === "tfng" || q.qformat === "ynng"
+                        ? "Select the correct answer"
+                        : "Options (select the correct one)"}
+                    </Typography>
                     <RadioGroup
                       value={String(q.correct_index)}
                       onChange={(e) => updateQuestion(si, qi, { correct_index: Number(e.target.value) })}
@@ -550,12 +642,15 @@ export default function CreateNewExam() {
                           <TextField
                             size="small" fullWidth placeholder={`Option ${oi + 1}`}
                             value={opt} onChange={(e) => updateOption(si, qi, oi, e.target.value)}
+                            disabled={!!FIXED_OPTIONS[q.qformat]}
                             sx={{ my: 0.5 }}
                           />
                         </Stack>
                       ))}
                     </RadioGroup>
-                    <Button size="small" startIcon={<AddRoundedIcon />} onClick={() => addOption(si, qi)}>Add option</Button>
+                    {!FIXED_OPTIONS[q.qformat] && (
+                      <Button size="small" startIcon={<AddRoundedIcon />} onClick={() => addOption(si, qi)}>Add option</Button>
+                    )}
                   </Box>
                 )}
 
