@@ -68,6 +68,9 @@ class User(Base):
     )
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Customer-readiness: email verification + Google sign-in identity.
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    google_sub: Mapped[Optional[str]] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow
@@ -99,6 +102,8 @@ class Class(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # Students self-enrol by typing this short code (teacher shares it).
+    join_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow
@@ -120,6 +125,19 @@ class ClassEnrolment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     klass: Mapped["Class"] = relationship("Class", back_populates="enrolments")
     user: Mapped["User"] = relationship("User", back_populates="enrolments")
+
+class AuthToken(Base):
+    """One-time tokens for password reset and email verification. Only the
+    SHA-256 hash is stored; the raw token lives in the emailed link."""
+    __tablename__ = "auth_tokens"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String(20), nullable=False)  # reset | verify
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
 
 class Case(Base):
     __tablename__ = "cases"

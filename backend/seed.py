@@ -343,7 +343,7 @@ def main(reset: bool = False):
         student = _user(db, email=STUDENT_EMAIL, username="demo_student",
                         name="Sam Student", role=models.UserRole.student)
 
-        klass = models.Class(name="Demo Class 2026", owner_id=teacher.id)
+        klass = models.Class(name="Demo Class 2026", owner_id=teacher.id, join_code="DEMO26")
         db.add(klass)
         db.flush()
         db.add(models.ClassEnrolment(class_id=klass.id, user_id=student.id))

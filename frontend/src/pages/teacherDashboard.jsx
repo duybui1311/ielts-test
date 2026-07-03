@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Card, Stack, Typography, Button, Chip, Divider, CircularProgress,
-  useTheme,
+  useTheme, TextField, Tooltip as MuiTooltip,
 } from "@mui/material";
+import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
 import ClassRoundedIcon from "@mui/icons-material/ClassRounded";
 import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
@@ -17,6 +18,85 @@ import { apiFetch } from "../api";
 import { StatCard, bandColor, chartTheme } from "../component/ui";
 import { BlurText } from "../component/TextReveal";
 import Heatmap from "../component/Heatmap";
+
+/** Teacher's classes with their share codes — students join with these. */
+function ClassCodesCard() {
+  const [classes, setClasses] = useState(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState("");
+
+  const load = () =>
+    apiFetch("/api/teacher/classes")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setClasses(Array.isArray(d) ? d : []))
+      .catch(() => setClasses([]));
+  useEffect(() => { load(); }, []);
+
+  const createClass = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const res = await apiFetch("/api/teacher/classes", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      if (res.ok) { setName(""); await load(); }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copy = (code) => {
+    try { navigator.clipboard.writeText(code); setCopied(code); setTimeout(() => setCopied(""), 1500); }
+    catch { /* clipboard unavailable */ }
+  };
+
+  if (classes === null) return null;
+  return (
+    <Card sx={{ p: 3, mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 0.5 }}>My classes</Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+        Students join a class by entering its code on their "My Tests" page — only then can
+        they see the tests you assign to it.
+      </Typography>
+      <Stack spacing={1}>
+        {classes.map((c) => (
+          <Stack key={c.id} direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Typography variant="body2" fontWeight={600} sx={{ minWidth: 140 }}>{c.name}</Typography>
+            <Chip size="small" variant="outlined" label={`${c.students} student${c.students === 1 ? "" : "s"}`} />
+            {c.join_code && (
+              <MuiTooltip title={copied === c.join_code ? "Copied!" : "Copy class code"}>
+                <Chip
+                  size="small"
+                  color="primary"
+                  icon={<ContentCopyRoundedIcon sx={{ fontSize: 14 }} />}
+                  label={c.join_code}
+                  onClick={() => copy(c.join_code)}
+                  sx={{ fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}
+                />
+              </MuiTooltip>
+            )}
+          </Stack>
+        ))}
+        {classes.length === 0 && (
+          <Typography variant="body2" color="text.secondary">No classes yet — create one below.</Typography>
+        )}
+      </Stack>
+      <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+        <TextField
+          size="small" label="New class name" value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") createClass(); }}
+        />
+        <Button variant="outlined" disabled={busy || !name.trim()} onClick={createClass}>
+          Create class
+        </Button>
+      </Stack>
+    </Card>
+  );
+}
+
 
 function readName() {
   try { return localStorage.getItem("osce-name") || ""; } catch { return ""; }
@@ -109,6 +189,8 @@ export default function TeacherDashboard() {
         <StatCard icon={<AssignmentRoundedIcon />} label="Exams" value={kpis.exams} gradient={theme.gradients.emerald} color="success.main" delay={200} />
         <StatCard icon={<PendingActionsRoundedIcon />} label="To review" value={kpis.to_review} gradient={theme.gradients.sunset} color="warning.main" delay={280} />
       </Box>
+
+      <ClassCodesCard />
 
       {!hasClasses ? (
         <Card sx={{ p: 5, textAlign: "center" }}>

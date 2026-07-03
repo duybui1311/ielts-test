@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Card, CardContent, CardActions,
   Button, Chip, Stack, CircularProgress, Alert, Tabs, Tab, alpha,
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField,
 } from "@mui/material";
 import { motion } from "framer-motion";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
@@ -149,13 +150,40 @@ export default function ExamList() {
   };
   const navigate = useNavigate();
 
+  // Join-a-class dialog (students enrol themselves with the teacher's code).
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const [reload, setReload] = useState(0);
+
   useEffect(() => {
     apiFetch("/api/exams")
       .then((r) => r.json())
       .then((d) => setExams(Array.isArray(d) ? d : []))
       .catch(() => setError("Could not load exams."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [reload]);
+
+  const joinClass = async () => {
+    setJoining(true);
+    setJoinError("");
+    try {
+      const res = await apiFetch("/api/classes/join", {
+        method: "POST",
+        body: JSON.stringify({ code: joinCode.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Could not join the class.");
+      setJoinOpen(false);
+      setJoinCode("");
+      setReload((n) => n + 1);
+    } catch (e) {
+      setJoinError(e.message);
+    } finally {
+      setJoining(false);
+    }
+  };
 
   const handleStart = async (examId) => {
     const userId = parseInt(localStorage.getItem("osce-user-id"), 10);
@@ -188,7 +216,35 @@ export default function ExamList() {
         title="My Tests"
         subtitle="Practise one skill at a time — choose a tab below."
         icon={<SchoolRoundedIcon />}
+        action={
+          <Button variant="outlined" size="small" onClick={() => setJoinOpen(true)}>
+            Join a class
+          </Button>
+        }
       />
+
+      {/* Join a class with the teacher's share code */}
+      <Dialog open={joinOpen} onClose={() => setJoinOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Join a class</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Type the class code your teacher shared (e.g. <strong>DEMO26</strong>).
+            Tests assigned to that class will appear here.
+          </Typography>
+          {joinError && <Alert severity="warning" sx={{ mb: 2 }}>{joinError}</Alert>}
+          <TextField
+            autoFocus fullWidth label="Class code" value={joinCode}
+            onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(""); }}
+            inputProps={{ style: { textTransform: "uppercase", letterSpacing: 2, fontWeight: 700 } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setJoinOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={joining || !joinCode.trim()} onClick={joinClass}>
+            {joining ? "Joining…" : "Join"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
 

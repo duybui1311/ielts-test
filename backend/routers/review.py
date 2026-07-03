@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models, storage
+from backend.service import models, scoping, storage
 from backend.service.auth_deps import get_current_user, require_role
 from backend.service.review_sched import apply_result
 
@@ -30,6 +30,9 @@ def queue(
     db: Session = Depends(get_db),
     user: models.User = Depends(_teacher),
 ):
+    # Teachers only review students from classes they own; admins see all.
+    student_ids = scoping.visible_student_ids(db, user)
+
     names = {
         u.id: (u.full_name or u.username or u.email or f"User {u.id}")
         for u in db.query(models.User).all()
@@ -37,18 +40,19 @@ def queue(
 
     # Queue = not-yet-approved work: fresh submissions plus AI drafts awaiting sign-off.
     pending = ["submitted", "ai_graded"]
-    writing = (
+    writing_q = (
         db.query(models.WritingSubmission)
         .filter(models.WritingSubmission.status.in_(pending))
-        .order_by(models.WritingSubmission.created_at.asc())
-        .all()
     )
-    speaking = (
+    speaking_q = (
         db.query(models.SpeakingSubmission)
         .filter(models.SpeakingSubmission.status.in_(pending))
-        .order_by(models.SpeakingSubmission.created_at.asc())
-        .all()
     )
+    if student_ids is not None:
+        writing_q = writing_q.filter(models.WritingSubmission.user_id.in_(student_ids))
+        speaking_q = speaking_q.filter(models.SpeakingSubmission.user_id.in_(student_ids))
+    writing = writing_q.order_by(models.WritingSubmission.created_at.asc()).all()
+    speaking = speaking_q.order_by(models.SpeakingSubmission.created_at.asc()).all()
 
     items = []
     for s in writing:

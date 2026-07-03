@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models, storage
+from backend.service import models, scoping, storage
 from backend.service.auth_deps import get_current_user
 from backend.service.subskills import SUB_SKILLS, SUB_SKILL_LABELS, heatmap
 from backend.service.review_sched import enqueue_wrong
@@ -50,12 +50,21 @@ def practice_skills(
     """Every sub_skill with the student's accuracy and how many questions exist."""
     acc = {h["sub_skill"]: h for h in heatmap(db, [user.id])}
 
-    counts = dict(
+    counts_q = (
         db.query(models.Question.sub_skill, func.count())
         .filter(
             models.Question.sub_skill.in_(SUB_SKILLS),
             models.Question.qtype.in_([models.QuestionType.mcq, models.QuestionType.short]),
         )
+    )
+    if scoping.is_student(user):
+        counts_q = (
+            counts_q.join(models.Station, models.Question.station_id == models.Station.id)
+            .join(models.Exam, models.Station.exam_id == models.Exam.id)
+            .filter(models.Exam.class_id.in_(scoping.enrolled_class_ids(db, user.id)))
+        )
+    counts = dict(
+        counts_q
         .group_by(models.Question.sub_skill)
         .all()
     )
@@ -83,16 +92,21 @@ def practice_questions(
     if sub_skill not in SUB_SKILLS:
         raise HTTPException(404, "Unknown question type.")
     n = max(1, min(n, 30))
-    questions = (
+    q = (
         db.query(models.Question)
         .filter(
             models.Question.sub_skill == sub_skill,
             models.Question.qtype.in_([models.QuestionType.mcq, models.QuestionType.short]),
         )
-        .order_by(func.random())
-        .limit(n)
-        .all()
     )
+    if scoping.is_student(user):
+        # Students drill only questions from tests assigned to their classes.
+        q = (
+            q.join(models.Station, models.Question.station_id == models.Station.id)
+            .join(models.Exam, models.Station.exam_id == models.Exam.id)
+            .filter(models.Exam.class_id.in_(scoping.enrolled_class_ids(db, user.id)))
+        )
+    questions = q.order_by(func.random()).limit(n).all()
     if not questions:
         raise HTTPException(404, "No questions available for this type yet.")
     return {

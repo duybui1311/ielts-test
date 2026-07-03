@@ -49,11 +49,83 @@ export default function Login() {
 	// ui state
 	const [submitting, setSubmitting] = React.useState(false);
 	const [error, setError] = React.useState("");
+	const [forgotMode, setForgotMode] = React.useState(false);
+	const [forgotSent, setForgotSent] = React.useState("");
+	const googleDivRef = React.useRef(null);
 
 	React.useEffect(() => {
 		if (isAuthed()) navigate(nextParam || landingFor(getRole()), { replace: true });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	const finishLogin = React.useCallback((data, emailUsed) => {
+		const role = normalizeRole(data?.role) || "student";
+		setAuthed(role, {
+			userId: data?.user_id,
+			name: data?.name || "",
+			email: emailUsed || data?.email || "",
+			token: data?.token || null,
+		});
+		try {
+			localStorage.setItem("bandly-email-verified", data?.email_verified === false ? "0" : "1");
+		} catch { /* ignore */ }
+		navigate(nextParam || landingFor(role), { replace: true });
+	}, [navigate, nextParam]);
+
+	// Google sign-in: render the official button when a client id is configured.
+	const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+	React.useEffect(() => {
+		if (!googleClientId || !googleDivRef.current) return;
+		const onCredential = async (response) => {
+			setError("");
+			try {
+				const res = await fetch(joinURL(API_BASE, "/api/auth/google"), {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ credential: response.credential }),
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) { setError(data.detail || "Google sign-in failed."); return; }
+				finishLogin(data);
+			} catch {
+				setError("Google sign-in failed. Please try again.");
+			}
+		};
+		const render = () => {
+			if (!window.google?.accounts?.id || !googleDivRef.current) return;
+			window.google.accounts.id.initialize({ client_id: googleClientId, callback: onCredential });
+			window.google.accounts.id.renderButton(googleDivRef.current, {
+				theme: "outline", size: "large", width: 352, text: "continue_with",
+			});
+		};
+		if (window.google?.accounts?.id) { render(); return; }
+		const s = document.createElement("script");
+		s.src = "https://accounts.google.com/gsi/client";
+		s.async = true;
+		s.onload = render;
+		document.head.appendChild(s);
+	}, [googleClientId, finishLogin]);
+
+	const sendReset = async () => {
+		setError("");
+		const email = identifier.trim();
+		if (!email || !email.includes("@")) { setError("Enter your account email first."); return; }
+		try {
+			setSubmitting(true);
+			const res = await fetch(joinURL(API_BASE, "/api/auth/forgot"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email }),
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) { setError(data.detail || "Could not send the reset email."); return; }
+			setForgotSent(data.detail || "If that email has an account, a reset link is on its way.");
+		} catch {
+			setError("Could not send the reset email. Please try again.");
+		} finally {
+			setSubmitting(false);
+		}
+	};
 
 	const onSubmit = async (e) => {
 		e.preventDefault();
@@ -79,15 +151,7 @@ export default function Login() {
 				return;
 			}
 
-			const role = normalizeRole(data?.role) || "student";
-			setAuthed(role, {
-				userId: data?.user_id,
-				name: data?.name || "",
-				email: trimmedId,
-				token: data?.token || null,
-			});
-
-			navigate(nextParam || landingFor(role), { replace: true });
+			finishLogin(data, trimmedId);
 		} catch {
 			setError("Unable to sign in. Please try again.");
 		} finally {
@@ -153,6 +217,7 @@ export default function Login() {
 						)}
 
 						{error && <Alert severity="error">{error}</Alert>}
+						{forgotSent && <Alert severity="success" onClose={() => setForgotSent("")}>{forgotSent}</Alert>}
 
 						<TextField
 							label="Email or username"
@@ -173,7 +238,7 @@ export default function Login() {
 							}}
 						/>
 
-						<TextField
+						{!forgotMode && <TextField
 							label="Password"
 							type={show ? "text" : "password"}
 							autoComplete="new-password"
@@ -201,11 +266,33 @@ export default function Login() {
 									),
 								},
 							}}
-						/>
+						/>}
 
-						<Button type="submit" variant="contained" size="large" disabled={submitting}>
-							{submitting ? "Signing in…" : "Sign in"}
-						</Button>
+						{forgotMode ? (
+							<Button variant="contained" size="large" disabled={submitting} onClick={sendReset}>
+								{submitting ? "Sending…" : "Email me a reset link"}
+							</Button>
+						) : (
+							<Button type="submit" variant="contained" size="large" disabled={submitting}>
+								{submitting ? "Signing in…" : "Sign in"}
+							</Button>
+						)}
+
+						<Typography variant="body2" textAlign="center">
+							<Button
+								variant="text" size="small"
+								onClick={() => { setForgotMode((m) => !m); setError(""); setForgotSent(""); }}
+								sx={{ p: 0, minWidth: 0, textTransform: "none" }}
+							>
+								{forgotMode ? "Back to sign in" : "Forgot password?"}
+							</Button>
+						</Typography>
+
+						{googleClientId && !forgotMode && (
+							<Box sx={{ display: "grid", placeItems: "center" }}>
+								<Box ref={googleDivRef} />
+							</Box>
+						)}
 
 						<Typography variant="body2" color="text.secondary" textAlign="center">
 							New here?{" "}
@@ -217,6 +304,18 @@ export default function Login() {
 							>
 								Create an account
 							</Button>
+						</Typography>
+
+						<Typography variant="caption" color="text.secondary" textAlign="center">
+							By using Bandly you agree to our{" "}
+							<Button variant="text" size="small" onClick={() => navigate("/terms")}
+								sx={{ p: 0, minWidth: 0, verticalAlign: "baseline", textTransform: "none", fontSize: "inherit" }}>
+								Terms
+							</Button>{" "}and{" "}
+							<Button variant="text" size="small" onClick={() => navigate("/privacy")}
+								sx={{ p: 0, minWidth: 0, verticalAlign: "baseline", textTransform: "none", fontSize: "inherit" }}>
+								Privacy Policy
+							</Button>.
 						</Typography>
 					</Stack>
 				</MotionBox>
