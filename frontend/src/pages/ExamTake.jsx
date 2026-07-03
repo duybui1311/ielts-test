@@ -35,6 +35,37 @@ const REF_LABEL = {
   speaking: "TASK",
 };
 
+// Fallback task instructions for tests imported before task_instructions
+// existed — the standard wording of each official IELTS task type.
+const FORMAT_INSTRUCTIONS = {
+  tfng: "Do the following statements agree with the information given in the text? Choose TRUE, FALSE or NOT GIVEN.",
+  ynng: "Do the following statements agree with the claims of the writer? Choose YES, NO or NOT GIVEN.",
+  matching: "Choose the correct answer for each question from the list.",
+  gap_fill: "Complete the sentences below with words taken from the passage.",
+};
+
+/** Group a section's questions into official-style task boxes: consecutive
+ * questions sharing the same instruction block (or, failing that, the same
+ * display format) belong to one task — like "Questions 1–7" on the paper. */
+function groupTasks(questions) {
+  const groups = [];
+  for (const q of questions || []) {
+    const instructions = (q.task_instructions || "").trim();
+    const key = instructions || `fmt:${q.qformat || q.qtype}`;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.items.push(q);
+    } else {
+      groups.push({
+        key,
+        instructions: instructions || FORMAT_INSTRUCTIONS[q.qformat] || null,
+        items: [q],
+      });
+    }
+  }
+  return groups;
+}
+
 export default function ExamTake() {
   const { attemptId } = useParams();
   const location = useLocation();
@@ -242,33 +273,56 @@ export default function ExamTake() {
   (examData?.sections || []).forEach((sec) =>
     (sec.questions || []).forEach((q) => flatQuestions.push(q))
   );
+  // Official IELTS numbering (1–40, continuous across sections). The server
+  // sends num_start/num_end — a "Choose N letters" question spans N numbers
+  // (e.g. 24–26); the fallback recomputes the same thing for older payloads.
+  const qWeight = (q) =>
+    q.qformat === "multi_select" ? (q.select_count || 2) : 1;
   const qNumber = {};
-  flatQuestions.forEach((q, i) => { qNumber[q.id] = i + 1; });
+  const qSpan = {};   // id -> [start, end], for task-box headers
+  let nextNum = 1;
+  flatQuestions.forEach((q) => {
+    const start = q.num_start ?? nextNum;
+    const end = q.num_end ?? (start + qWeight(q) - 1);
+    qNumber[q.id] = start === end ? `${start}` : `${start}–${end}`;
+    qSpan[q.id] = [start, end];
+    nextNum = end + 1;
+  });
+  const totalMarks = nextNum - 1;
   const isAnswered = (q) => {
     const a = answers[q.id];
     if (!a) return false;
     if (q.qformat === "multi_select") return parsePicked(a.value_text).length > 0;
     return a.choice_index != null || (a.value_text && a.value_text.trim() !== "");
   };
-  const answeredCount = flatQuestions.filter(isAnswered).length;
+  // Progress counts question numbers, so a half-done "choose 3" shows as 2/40.
+  const answeredCount = flatQuestions.reduce((n, q) => {
+    const a = answers[q.id];
+    if (!a) return n;
+    if (q.qformat === "multi_select") {
+      return n + Math.min(parsePicked(a.value_text).length, qWeight(q));
+    }
+    return n + (isAnswered(q) ? 1 : 0);
+  }, 0);
 
   const jumpTo = (id) =>
     qRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
 
-  // ── A single question (shared across all skills) ─────────────────────────
-  const renderQuestion = (q) => (
-    <Paper
+  // ── A single question row inside a task box ──────────────────────────────
+  const renderQuestion = (q, isLast) => (
+    <Box
       key={q.id}
       ref={(el) => { qRefs.current[q.id] = el; }}
-      variant="outlined"
       sx={(t) => ({
-        p: 2, mb: 2, scrollMarginTop: TOPBAR_HEIGHT + 96,
-        ...(flags[q.id] && { borderColor: "warning.main", boxShadow: `inset 3px 0 0 ${t.palette.warning.main}` }),
+        px: 2, py: 1.5, scrollMarginTop: TOPBAR_HEIGHT + 96,
+        borderBottom: isLast ? "none" : "1px solid",
+        borderColor: "divider",
+        ...(flags[q.id] && { boxShadow: `inset 3px 0 0 ${t.palette.warning.main}` }),
       })}
     >
       <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <Typography variant="body2" fontWeight={600} gutterBottom sx={{ flex: 1 }}>
-          <Box component="span" sx={{ color: "primary.main", mr: 1 }}>{qNumber[q.id]}</Box>
+        <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+          <Box component="span" sx={{ color: "primary.main", fontWeight: 700, mr: 1 }}>{qNumber[q.id]}</Box>
           {/* Gap-fill sentences render inside the input (inline blank), so
               don't repeat the prompt here. */}
           {q.qformat === "gap_fill" ? null : q.prompt}
@@ -314,8 +368,37 @@ export default function ExamTake() {
           onCommitText={(v) => handleShortBlur(q.id, v)}
         />
       )}
-    </Paper>
+    </Box>
   );
+
+  // ── A task box: "Questions 1–7" + instructions + its question rows,
+  //    matching how tasks are presented on the official computer-based test.
+  const renderTaskGroup = (group, gi) => {
+    const first = group.items[0];
+    const last = group.items[group.items.length - 1];
+    const start = qSpan[first.id]?.[0];
+    const end = qSpan[last.id]?.[1];
+    const label = start === end ? `Question ${start}` : `Questions ${start}–${end}`;
+    return (
+      <Paper key={group.key + gi} variant="outlined" sx={{ mb: 2.5, overflow: "hidden" }}>
+        <Box
+          sx={(t) => ({
+            px: 2, py: 1.25,
+            bgcolor: t.palette.mode === "dark" ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)",
+            borderBottom: "1px solid", borderColor: "divider",
+          })}
+        >
+          <Typography variant="subtitle2" fontWeight={700}>{label}</Typography>
+          {group.instructions && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+              {group.instructions}
+            </Typography>
+          )}
+        </Box>
+        {group.items.map((q, i) => renderQuestion(q, i === group.items.length - 1))}
+      </Paper>
+    );
+  };
 
   /** Per-skill reference panel: audio (listening), chart (writing), text. */
   const renderReference = (sec, skill) => {
@@ -500,7 +583,7 @@ export default function ExamTake() {
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
             <CheckCircleRoundedIcon fontSize="small" color="success" />
             <Typography variant="body2" fontWeight={600}>
-              {answeredCount} / {flatQuestions.length} answered
+              {answeredCount} / {totalMarks} answered
             </Typography>
             {flaggedCount > 0 && (
               <Chip
@@ -514,7 +597,7 @@ export default function ExamTake() {
             <Box sx={{ flexGrow: 1, ml: 1 }}>
               <LinearProgress
                 variant="determinate"
-                value={(answeredCount / flatQuestions.length) * 100}
+                value={(answeredCount / Math.max(totalMarks, 1)) * 100}
                 color="success"
                 sx={{ borderRadius: 1 }}
               />
@@ -566,13 +649,13 @@ export default function ExamTake() {
                 }}
               >
                 {renderReference(sec, skill)}
-                <Box>{sec.questions.map((q) => renderQuestion(q))}</Box>
+                <Box>{groupTasks(sec.questions).map(renderTaskGroup)}</Box>
               </Box>
             ) : (
               /* Listening / Writing / Speaking: material on top, questions below */
               <Stack spacing={3}>
                 {renderReference(sec, skill)}
-                <Box>{sec.questions.map((q) => renderQuestion(q))}</Box>
+                <Box>{groupTasks(sec.questions).map(renderTaskGroup)}</Box>
               </Stack>
             )}
           </Box>

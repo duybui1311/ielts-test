@@ -3,6 +3,7 @@ import {
   Box, Card, Stack, Typography, Button, TextField, MenuItem, IconButton,
   Divider, Radio, RadioGroup, FormControlLabel, Alert, Snackbar, Chip, Checkbox,
   Collapse, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
+  Switch,
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
@@ -39,6 +40,7 @@ function aiToSections(result) {
       qformat: q.qformat || "",
       correct_indices: Array.isArray(q.correct_indices) ? q.correct_indices : [],
       select_count: Number.isInteger(q.select_count) ? q.select_count : 2,
+      task_instructions: q.task_instructions || "",
       answer_missing: !!q.answer_missing,
     })),
   }));
@@ -89,6 +91,23 @@ function answerSummary(q) {
   return q.accept_answers || "⚠ needs answer";
 }
 
+/** Official IELTS numbering across all sections (1–40): a multi-select
+ * "Choose N" question spans N numbers, so labels read like the paper (24–26). */
+function officialNumbering(sections) {
+  const labels = {};
+  let n = 1;
+  for (const sec of sections) {
+    for (const q of sec.questions) {
+      const w = q.qformat === "multi_select"
+        ? (Number(q.select_count) || (q.correct_indices || []).length || 2)
+        : 1;
+      labels[q.key] = w === 1 ? `${n}` : `${n}–${n + w - 1}`;
+      n += w;
+    }
+  }
+  return labels;
+}
+
 let _uid = 0;
 const uid = () => ++_uid;
 
@@ -97,6 +116,7 @@ const newQuestion = () => ({
   options: ["", "", "", ""], correct_index: 0,
   accept_answers: "", sub_skill: "multiple_choice",
   qformat: "", correct_indices: [], select_count: 2,
+  task_instructions: "",
 });
 const newSection = (position) => ({
   key: uid(), position, skill: "reading", title: "", passage_md: "",
@@ -107,9 +127,9 @@ const isProductive = (skill) => skill === "writing" || skill === "speaking";
 
 // One-click question presets for the streamlined builder.
 const QUESTION_PRESETS = {
-  mcq:     { qtype: "mcq",     sub_skill: "multiple_choice", options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "", correct_indices: [], select_count: 2 },
-  short:   { qtype: "short",   sub_skill: "gap_fill",        options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "gap_fill", correct_indices: [], select_count: 2 },
-  explain: { qtype: "explain", sub_skill: "short_answer",    options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "", correct_indices: [], select_count: 2 },
+  mcq:     { qtype: "mcq",     sub_skill: "multiple_choice", options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "", correct_indices: [], select_count: 2, task_instructions: "" },
+  short:   { qtype: "short",   sub_skill: "gap_fill",        options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "gap_fill", correct_indices: [], select_count: 2, task_instructions: "" },
+  explain: { qtype: "explain", sub_skill: "short_answer",    options: ["", "", "", ""], correct_index: 0, accept_answers: "", prompt: "", qformat: "", correct_indices: [], select_count: 2, task_instructions: "" },
 };
 const presetQuestion = (type) => ({ key: uid(), ...QUESTION_PRESETS[type] });
 
@@ -144,6 +164,9 @@ export default function CreateNewExam() {
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importAnswerFile, setImportAnswerFile] = useState(null);
+  // Also generate per-question explanations during import (~2× slower) —
+  // off by default; explanations are generated on demand when students open them.
+  const [importEnrich, setImportEnrich] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   // Post-import verification: totals + questions the AI couldn't answer.
@@ -157,6 +180,7 @@ export default function CreateNewExam() {
       const fd = new FormData();
       fd.append("file", importFile);
       if (importAnswerFile) fd.append("answer_sheet", importAnswerFile);
+      if (importEnrich) fd.append("enrich", "true");
       const res = await fetch(`${API_BASE}/api/import/ai`, {
         method: "POST",
         headers: authHeaders(),
@@ -360,6 +384,7 @@ export default function CreateNewExam() {
             prompt: q.prompt.trim(),
             sub_skill: q.sub_skill || null,
             display_order: qi + 1,
+            task_instructions: (q.task_instructions || "").trim() || null,
           };
           if (q.qtype === "mcq") {
             const options = q.options.map((o) => o.trim()).filter(Boolean);
@@ -426,6 +451,8 @@ export default function CreateNewExam() {
       </Box>
     );
   }
+
+  const qNums = officialNumbering(sections);
 
   return (
     <Box sx={{ maxWidth: 900 }}>
@@ -552,7 +579,7 @@ export default function CreateNewExam() {
                   size="small"
                   color={q.answer_missing ? "warning" : "default"}
                   variant="outlined"
-                  label={`Q${sections.slice(0, si).reduce((n, s) => n + s.questions.length, 0) + qi + 1}: ${answerSummary(q)}`}
+                  label={`Q${qNums[q.key]}: ${answerSummary(q)}`}
                 />
               ))}
             </Box>
@@ -619,7 +646,7 @@ export default function CreateNewExam() {
             {sec.questions.map((q, qi) => (
               <Box key={q.key} sx={{ p: 2, mb: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-                  <Typography variant="body2" fontWeight={600}>Q{qi + 1}</Typography>
+                  <Typography variant="body2" fontWeight={600}>Q{qNums[q.key]}</Typography>
                   {q.answer_missing && (
                     <Chip size="small" color="warning" label="needs answer — not found in the paper/key" />
                   )}
@@ -666,6 +693,15 @@ export default function CreateNewExam() {
                     onChange={(e) => updateQuestion(si, qi, { prompt: e.target.value })}
                     sx={{ gridColumn: { sm: "1 / -1" } }}
                   />
+                  {q.qtype !== "explain" && (
+                    <TextField
+                      label="Task instructions (groups consecutive questions into one box)"
+                      placeholder="e.g. Complete the notes below. Write ONE WORD ONLY from the passage for each answer."
+                      value={q.task_instructions || ""}
+                      onChange={(e) => updateQuestion(si, qi, { task_instructions: e.target.value })}
+                      sx={{ gridColumn: { sm: "1 / -1" } }}
+                    />
+                  )}
                 </Box>
 
                 {q.qtype === "mcq" && q.qformat === "multi_select" && (
@@ -831,12 +867,29 @@ export default function CreateNewExam() {
                 Remove answer sheet
               </Button>
             )}
+
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={importEnrich}
+                  disabled={importing}
+                  onChange={(e) => setImportEnrich(e.target.checked)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  Also generate answer explanations now (about twice as slow — otherwise
+                  they're created automatically the first time a student opens one)
+                </Typography>
+              }
+            />
           </Stack>
 
           {importing && (
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 2 }}>
               <CircularProgress size={20} />
-              <Typography variant="body2" color="text.secondary">Converting… this can take a few seconds.</Typography>
+              <Typography variant="body2" color="text.secondary">Converting… a full test usually takes about a minute.</Typography>
             </Stack>
           )}
         </DialogContent>
