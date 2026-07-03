@@ -74,7 +74,7 @@ async def upload_media(
         raise HTTPException(503, str(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"Upload failed: {e}")
-    return {"url": url}
+    return {"url": storage.sign_media_url(url)}
 
 
 class QuestionIn(BaseModel):
@@ -156,7 +156,9 @@ def import_test(
         db.flush()
         station = models.Station(
             exam_id=exam.id, position=s.position, case_id=case.id,
-            skill=s.skill, audio_url=s.audio_url, image_url=s.image_url,
+            skill=s.skill,
+            audio_url=storage.canonical_media_url(s.audio_url),
+            image_url=storage.canonical_media_url(s.image_url),
         )
         db.add(station)
         db.flush()
@@ -256,7 +258,9 @@ def _replace_sections(db: Session, exam: models.Exam, sections: List[SectionIn])
         db.flush()
         station = models.Station(
             exam_id=exam.id, position=s.position, case_id=case.id,
-            skill=s.skill, audio_url=s.audio_url, image_url=s.image_url,
+            skill=s.skill,
+            audio_url=storage.canonical_media_url(s.audio_url),
+            image_url=storage.canonical_media_url(s.image_url),
         )
         db.add(station)
         db.flush()
@@ -368,8 +372,8 @@ def export_test(
             "skill": st.skill,
             "title": st.case.title,
             "passage_md": st.case.body_md,
-            "audio_url": st.audio_url,
-            "image_url": st.image_url,
+            "audio_url": storage.sign_media_url(st.audio_url),
+            "image_url": storage.sign_media_url(st.image_url),
             "questions": [{
                 "qtype": q.qtype.value,
                 "prompt": q.prompt,

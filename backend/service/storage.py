@@ -1,7 +1,9 @@
 """Supabase Storage helper.
 
-Uploads bytes to a public bucket and returns the public URL, so uploads persist
-online instead of on local disk. Buckets in use:
+Uploads bytes to Storage and returns the canonical URL; media is served to
+clients through short-lived SIGNED URLs (see sign_media_url), so the buckets can
+be made private — student recordings and charts are then unreachable without a
+token. Buckets in use:
 - "writing-charts"  — IELTS Task 1 chart/diagram images.
 - "speaking-audio"  — student speaking recordings.
 
@@ -91,3 +93,56 @@ def upload_bytes(
         name, data, {"content-type": content_type, "upsert": "true"},
     )
     return _public_url(bucket, name)
+
+
+# Matches our own Storage URLs (public or signed form): bucket + object name.
+_MEDIA_RE = re.compile(r"/storage/v1/object/(?:public|sign)/([^/]+)/([^?]+)")
+
+# Signed links last long enough for any test/review session.
+SIGNED_URL_TTL_SECONDS = int(os.getenv("SIGNED_URL_TTL_SECONDS", "21600"))  # 6h
+
+
+def _parse_media_url(url: str | None):
+    """Return (bucket, name) when `url` is one of OUR Storage URLs, else None."""
+    if not url:
+        return None
+    base = normalize_public_base(os.getenv("SUPABASE_URL"))
+    if not base or not url.startswith(base):
+        return None
+    m = _MEDIA_RE.search(url)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def canonical_media_url(url: str | None) -> str | None:
+    """Normalize a media URL for STORAGE in the database: signed links (which
+    expire) are converted back to the stable public form; anything else —
+    external URLs, local /uploads paths — passes through unchanged."""
+    parsed = _parse_media_url(url)
+    if not parsed:
+        return url
+    return _public_url(*parsed)
+
+
+def sign_media_url(url: str | None, expires: int = 0) -> str | None:
+    """Convert a stored media URL into a short-lived signed link for the client.
+
+    Only touches our own Storage URLs; external links and local paths pass
+    through. Falls back to the original URL on any failure (e.g. Storage not
+    configured) so a public-bucket deploy keeps working during the transition."""
+    parsed = _parse_media_url(url)
+    if not parsed:
+        return url
+    bucket, name = parsed
+    try:
+        res = _client().storage.from_(bucket).create_signed_url(
+            name, expires or SIGNED_URL_TTL_SECONDS
+        )
+        signed = res.get("signedURL") or res.get("signedUrl") if isinstance(res, dict) else None
+        if not signed:
+            return url
+        if signed.startswith("http"):
+            return signed
+        base = normalize_public_base(os.getenv("SUPABASE_URL"))
+        return f"{base}/storage/v1{signed}" if signed.startswith("/object") else f"{base}{signed}"
+    except Exception:  # noqa: BLE001 — never break content delivery over signing
+        return url
