@@ -179,13 +179,24 @@ export default function ExamResults() {
     0
   );
 
+  // Official IELTS question numbers (1–40 across sections): the server sends
+  // num_start/num_end; a "Choose N letters" question spans a range (24–26).
+  let fallbackNum = 0;
+  const qLabel = (q) => {
+    fallbackNum += 1;
+    const start = q.num_start ?? fallbackNum;
+    const end = q.num_end ?? start;
+    fallbackNum = end;
+    return start === end ? `${start}` : `${start}–${end}`;
+  };
+
   // "Only mistakes" view: drop correct/unmarked questions and empty sections.
   const visibleSections = (data.sections || [])
     .map((sec) => ({
       ...sec,
-      // Keep the original question number when filtering to mistakes only.
+      // Number before filtering so mistakes keep their official number.
       visibleQuestions: (sec.questions || [])
-        .map((q, i) => ({ q, num: i + 1 }))
+        .map((q) => ({ q, num: qLabel(q) }))
         .filter(({ q }) => !onlyMistakes || q.is_auto_correct === false),
     }))
     .filter((sec) => sec.visibleQuestions.length > 0);
@@ -284,7 +295,7 @@ export default function ExamResults() {
               <Typography variant="body2" color="text.secondary">
                 Raw score:{" "}
                 <strong>
-                  {sec.raw_score ?? "—"} / {sec.questions.length}
+                  {sec.raw_score ?? "—"} / {sec.total_marks ?? sec.questions.length}
                 </strong>
               </Typography>
               {sec.band != null && (
@@ -359,6 +370,10 @@ export default function ExamResults() {
                   >
                     Your answer:{" "}
                     <strong>{q.student_answer ?? "(no answer)"}</strong>
+                    {/* Multi-select is worth 1 mark per correct pick — show partial credit */}
+                    {q.qformat === "multi_select" && q.is_auto_correct === false && (q.auto_score ?? 0) > 0 && (
+                      <> — {q.auto_score} of {q.marks} marks</>
+                    )}
                   </Typography>
                   {q.is_auto_correct === false && q.correct_answer && (
                     <Typography

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.service.database import get_db
 from backend.service import models
@@ -24,18 +24,21 @@ def _build_content(exam, attempt_id, db):
         .filter(models.StationAttempt.exam_attempt_id == attempt_id)
         .all()
     }
+    # One round-trip for every saved answer of the attempt (not one per station —
+    # each query is a full round-trip to the remote DB).
+    saved = {}
+    if sa_map:
+        for ans in db.query(models.Answer).filter(
+            models.Answer.station_attempt_id.in_(list(sa_map.values()))
+        ).all():
+            saved[ans.question_id] = {
+                "choice_index": ans.choice_index,
+                "value_text": ans.value_text,
+            }
     sections = []
+    next_num = 1  # official IELTS numbering, continuous across sections (1–40)
     for station in sorted(exam.stations, key=lambda s: s.position):
         sa_id = sa_map.get(station.id)
-        saved = {}
-        if sa_id:
-            for ans in db.query(models.Answer).filter(
-                models.Answer.station_attempt_id == sa_id
-            ).all():
-                saved[ans.question_id] = {
-                    "choice_index": ans.choice_index,
-                    "value_text": ans.value_text,
-                }
         questions = []
         for q in sorted(station.questions, key=lambda x: x.display_order):
             entry = {
@@ -44,9 +47,13 @@ def _build_content(exam, attempt_id, db):
                 "qformat": q.qformat,
                 "prompt": q.prompt,
                 "display_order": q.display_order,
+                "num_start": next_num,
+                "num_end": next_num + q.marks - 1,
                 "sub_skill": q.sub_skill,
+                "task_instructions": q.task_instructions,
                 "saved_answer": saved.get(q.id),
             }
+            next_num += q.marks
             if q.qtype.value == "mcq":
                 entry["options"] = q.options_json or []
                 if q.qformat == "multi_select":
@@ -70,10 +77,19 @@ def _build_content(exam, attempt_id, db):
 
 @router.get("/api/exams")
 def list_exams(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    exams = db.query(models.Exam).order_by(models.Exam.created_at.desc()).all()
+    exams = (
+        db.query(models.Exam)
+        # Eager-load stations + questions in two batched queries instead of
+        # lazy-loading per exam/station (each lazy load is a full round-trip
+        # to the remote DB — this endpoint was the slow part of the test list).
+        .options(selectinload(models.Exam.stations).selectinload(models.Station.questions))
+        .order_by(models.Exam.created_at.desc())
+        .all()
+    )
     result = []
     for exam in exams:
-        q_count = sum(len(st.questions) for st in exam.stations)
+        # Count official question numbers, not DB rows (multi-select spans N).
+        q_count = sum(q.marks for st in exam.stations for q in st.questions)
         skills = list({st.skill for st in exam.stations if st.skill})
         result.append({
             "id": exam.id,
@@ -99,7 +115,15 @@ def start_attempt(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    exam = db.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
+    exam = (
+        db.query(models.Exam)
+        .options(
+            selectinload(models.Exam.stations).selectinload(models.Station.questions),
+            selectinload(models.Exam.stations).joinedload(models.Station.case),
+        )
+        .filter(models.Exam.id == payload.exam_id)
+        .first()
+    )
     if not exam:
         raise HTTPException(404, "Exam not found")
 
@@ -155,7 +179,15 @@ def get_content(
         raise HTTPException(404, "Attempt not found")
     if not _owns_or_teacher(attempt, user):
         raise HTTPException(403, "Not allowed.")
-    exam = db.query(models.Exam).filter(models.Exam.id == attempt.exam_id).first()
+    exam = (
+        db.query(models.Exam)
+        .options(
+            selectinload(models.Exam.stations).selectinload(models.Station.questions),
+            selectinload(models.Exam.stations).joinedload(models.Station.case),
+        )
+        .filter(models.Exam.id == attempt.exam_id)
+        .first()
+    )
     content = _build_content(exam, attempt.id, db)
     return {
         "attempt_id": attempt.id,
@@ -275,27 +307,42 @@ def get_results(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    ea = db.query(models.ExamAttempt).filter(
-        models.ExamAttempt.id == attempt_id
-    ).first()
+    ea = (
+        db.query(models.ExamAttempt)
+        .options(
+            selectinload(models.ExamAttempt.station_attempts)
+            .joinedload(models.StationAttempt.station)
+            .selectinload(models.Station.questions),
+            selectinload(models.ExamAttempt.station_attempts)
+            .joinedload(models.StationAttempt.station)
+            .joinedload(models.Station.case),
+        )
+        .filter(models.ExamAttempt.id == attempt_id)
+        .first()
+    )
     if not ea:
         raise HTTPException(404, "Attempt not found")
     if not _owns_or_teacher(ea, user):
         raise HTTPException(403, "Not allowed.")
 
+    # All answers of the attempt in one query — one per question was the main
+    # reason the results page loaded slowly against the remote DB.
+    ans_map = {}
+    sa_ids = [sa.id for sa in ea.station_attempts]
+    if sa_ids:
+        for a in db.query(models.Answer).filter(
+            models.Answer.station_attempt_id.in_(sa_ids)
+        ).all():
+            ans_map[(a.station_attempt_id, a.question_id)] = a
+
     sections = []
+    next_num = 1  # official IELTS numbering, continuous across sections (1–40)
     for sa in sorted(ea.station_attempts, key=lambda x: x.station.position):
         station = sa.station
         questions_out = []
+        section_marks = 0
         for q in sorted(station.questions, key=lambda x: x.display_order):
-            ans = (
-                db.query(models.Answer)
-                .filter(
-                    models.Answer.station_attempt_id == sa.id,
-                    models.Answer.question_id == q.id,
-                )
-                .first()
-            )
+            ans = ans_map.get((sa.id, q.id))
             opts = q.options_json or []
 
             def _opts_at(indices):
@@ -341,15 +388,22 @@ def get_results(
                 "qtype": q.qtype.value,
                 "qformat": q.qformat,
                 "prompt": q.prompt,
+                "num_start": next_num,
+                "num_end": next_num + q.marks - 1,
                 "sub_skill": q.sub_skill,
+                "task_instructions": q.task_instructions,
                 "options": opts,
                 "student_answer": student_answer,
                 "correct_answer": correct_answer,
                 "is_auto_correct": ans.is_auto_correct if ans else None,
+                "auto_score": ans.auto_score if ans else None,
+                "marks": q.marks,
                 "explanation": q.explanation,
                 "support_sentences": q.support_sentences or [],
                 "paraphrases": q.paraphrases or [],
             })
+            next_num += q.marks
+            section_marks += q.marks
 
         sections.append({
             "station_id": sa.station_id,
@@ -357,6 +411,7 @@ def get_results(
             "title": station.case.title,
             "passage_md": station.case.body_md,
             "raw_score": sa.raw_score,
+            "total_marks": section_marks,
             "band": sa.band,
             "questions": questions_out,
         })

@@ -32,22 +32,27 @@ def _norm(t):
     return " ".join((t or "").strip().lower().split())
 
 
-def _multi_select_ok(answer, question) -> bool:
-    """Grade a multi_select question: the student's picked option indices
-    (stored as a JSON array in value_text) must equal the correct set."""
+def _multi_select_score(answer, question) -> int:
+    """Grade a multi_select ("Choose N letters") question the official IELTS
+    way: each correctly picked option earns one mark, up to the task's N. The
+    student's picks are a JSON array of option indices in value_text."""
     import json
     try:
         picked = json.loads(answer.value_text or "[]")
     except (ValueError, TypeError):
-        return False
+        return 0
     if not isinstance(picked, list):
-        return False
+        return 0
     try:
         picked_set = {int(i) for i in picked}
     except (ValueError, TypeError):
-        return False
+        return 0
     correct = {int(i) for i in (question.correct_indices or [])}
-    return bool(correct) and picked_set == correct
+    cap = question.marks
+    # Picking more than allowed can't be rewarded (the UI caps this anyway).
+    if len(picked_set) > cap:
+        return 0
+    return min(len(picked_set & correct), cap)
 
 
 def autograde_station_attempt(db: Session, station_attempt_id: int):
@@ -67,22 +72,27 @@ def autograde_station_attempt(db: Session, station_attempt_id: int):
 
     correct = 0
     autogradable = [q for q in questions.values() if q.qtype.value in ("mcq", "short")]
+    # Marks, not rows: a multi-select "Choose N" row is worth N marks, so a full
+    # test totals 40 like the official paper.
+    total_marks = sum(q.marks for q in autogradable)
     for a in answers:
         q = questions.get(a.question_id)
         if not q or q.qtype.value == "explain":   # writing -> AI later
             continue
         if q.qtype.value == "mcq" and q.qformat == "multi_select":
-            ok = _multi_select_ok(a, q)
+            score = _multi_select_score(a, q)
+            ok = score == q.marks
         elif q.qtype.value == "mcq":
             ok = a.choice_index is not None and a.choice_index == q.correct_index
+            score = 1 if ok else 0
         else:  # short
             accept = {_norm(x) for x in (q.accept_answers or [])}
             ok = _norm(a.value_text) in accept
+            score = 1 if ok else 0
         a.is_auto_correct = bool(ok)
-        a.auto_score = 1.0 if ok else 0.0
-        if ok:
-            correct += 1
-        else:
+        a.auto_score = float(score)
+        correct += score
+        if not ok:
             db.add(ErrorTag(
                 station_attempt_id=sa.id,
                 answer_id=a.id,
@@ -98,10 +108,10 @@ def autograde_station_attempt(db: Session, station_attempt_id: int):
 
     sa.raw_score = float(correct)
     if station and station.skill in ("listening", "reading"):
-        sa.band = raw_to_band(correct, len(autogradable), station.skill)
+        sa.band = raw_to_band(correct, total_marks, station.skill)
     sa.status = AttemptStatus.graded
     db.commit()
-    return {"raw_score": correct, "total": len(autogradable), "band": sa.band}
+    return {"raw_score": correct, "total": total_marks, "band": sa.band}
 
 
 # Skills the platform auto-grades into a numeric band. Writing/Speaking are NOT

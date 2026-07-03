@@ -91,6 +91,7 @@ class QuestionIn(BaseModel):
     qformat: Optional[Literal["tfng", "ynng", "matching", "multi_select", "gap_fill"]] = None
     correct_indices: Optional[List[int]] = None  # multi_select answer set
     select_count: Optional[int] = None           # picks required for multi_select
+    task_instructions: Optional[str] = None      # instruction block above the task
 
 
 class SectionIn(BaseModel):
@@ -175,6 +176,7 @@ def import_test(
                 qformat=q.qformat,
                 correct_indices=q.correct_indices,
                 select_count=q.select_count,
+                task_instructions=q.task_instructions,
             ))
     db.commit()
     return {"exam_id": exam.id, "sections": len(payload.sections)}
@@ -274,6 +276,7 @@ def _replace_sections(db: Session, exam: models.Exam, sections: List[SectionIn])
                 qformat=q.qformat,
                 correct_indices=q.correct_indices,
                 select_count=q.select_count,
+                task_instructions=q.task_instructions,
             ))
     exam.total_stations = len(sections)
 
@@ -380,6 +383,7 @@ def export_test(
                 "qformat": q.qformat,
                 "correct_indices": q.correct_indices,
                 "select_count": q.select_count,
+                "task_instructions": q.task_instructions,
             } for q in st.questions],
         })
     return out

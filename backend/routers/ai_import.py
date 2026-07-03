@@ -27,7 +27,7 @@ import io
 import time
 import json
 import base64
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
@@ -72,7 +72,7 @@ TEST_TOOL = {
             "name": {"type": "string", "description": "Title of the whole test"},
             "difficulty": {"type": "string", "enum": ["low", "medium", "high"]},
             "time_limit_min": {"type": "integer"},
-            "source_question_count": {"type": "integer", "description": "The total number of questions printed in the source material (count the numbered items before extracting; a 'Choose TWO letters' task counts as ONE)."},
+            "source_question_count": {"type": "integer", "description": "The highest question number printed in the source material (official IELTS numbering — a 'Choose TWO letters' task covering questions 24-25 counts as TWO). A full IELTS paper is 40."},
             "sections": {
                 "type": "array",
                 "items": {
@@ -89,6 +89,7 @@ TEST_TOOL = {
                                     "qtype": {"type": "string", "enum": ["mcq", "short", "explain"]},
                                     "qformat": {"type": "string", "enum": ["tfng", "ynng", "matching", "multi_select", "gap_fill"], "description": "IELTS display format: tfng=True/False/Not Given, ynng=Yes/No/Not Given, matching=pick from a shared list, multi_select=choose N letters, gap_fill=complete the blank. Omit for plain multiple choice / short answer."},
                                     "prompt": {"type": "string"},
+                                    "task_instructions": {"type": "string", "description": "The exact instruction block printed above this question's task, including word limits (e.g. 'Complete the notes below. Write ONE WORD ONLY from the passage for each answer.'). Use the IDENTICAL string for every question of the same task."},
                                     "options": {"type": "array", "items": {"type": "string"}, "description": "MCQ options"},
                                     "correct_index": {"type": "integer", "description": "0-based index of the correct MCQ option"},
                                     "correct_indices": {"type": "array", "items": {"type": "integer"}, "description": "multi_select only: 0-based indices of ALL correct options"},
@@ -141,24 +142,36 @@ SYSTEM = (
     "qformat 'multi_select', all options in `options`, ALL correct 0-based indices in "
     "`correct_indices`, and `select_count` = how many must be chosen. Output the task "
     "ONCE as a single question — do not repeat it per answer.\n"
-    "   - Gap-fill / sentence / summary / note / table completion: qtype 'short', "
-    "qformat 'gap_fill'. Put the sentence containing the blank in `prompt`, writing the "
-    "blank as underscores like '________'. All acceptable answers (synonyms, "
-    "British/American spellings) go in `accept_answers`.\n"
+    "   - Gap-fill / sentence / summary / note / table completion where students write "
+    "words FROM THE PASSAGE: qtype 'short', qformat 'gap_fill'. Put the sentence "
+    "containing the blank in `prompt`, writing the blank as underscores like '________'. "
+    "All acceptable answers (synonyms, British/American spellings) go in `accept_answers`.\n"
+    "   - Summary/note completion where students choose from a GIVEN list of words or "
+    "phrases (e.g. 'Complete the summary using the list of words, A-D, below'): this is a "
+    "matching task, NOT a gap-fill — qtype 'mcq', qformat 'matching', `options` = the "
+    "full word list in its original order, correct_index from the key.\n"
     "   - Other short answers (e.g. 'answer in NO MORE THAN TWO WORDS' questions): "
     "qtype 'short', no qformat, answers in `accept_answers`.\n"
     "   - 'explain' for Writing and Speaking tasks and any essay/extended answer. "
     "EVERY question in a writing or speaking section must be 'explain'.\n"
     "4. Set `sub_skill` for every reading/listening question, choosing the single best "
     f"fit from this exact list (no other values): {', '.join(SUB_SKILLS)}.\n"
-    "5. COMPLETENESS IS CRITICAL. Before extracting, count every question printed in "
-    "the material and put that number in source_question_count (a 'Choose TWO letters' "
-    "task counts as one). Then output EVERY question — never skip, merge or summarise "
+    "5. COMPLETENESS IS CRITICAL. Before extracting, find the highest question number "
+    "printed in the material and put it in source_question_count (official numbering: a "
+    "'Choose TWO letters' task covering questions 24-25 counts as TWO; a full IELTS "
+    "paper is 40). Then output EVERY question — never skip, merge or summarise "
     "numbered items, even when they look repetitive, span page breaks, sit inside "
     "tables/note templates, or continue after an instruction box. If a question is "
     "partly illegible, still output it with your best reading of the prompt.\n"
     "5b. Keep questions in their original order. Number nothing in the prompt text "
     "itself — the position is enough.\n"
+    "5c. Set `task_instructions` on EVERY question: the exact instruction block printed "
+    "above its task, word limits included (e.g. 'Complete the notes below. Write ONE WORD "
+    "ONLY from the passage for each answer.' or 'Do the following statements agree with "
+    "the information given in the text? Choose TRUE, FALSE or NOT GIVEN.'). Every "
+    "question belonging to the same task must carry the IDENTICAL string — the test "
+    "screen groups consecutive questions that share it into one task box, exactly like "
+    "the official computer-based test.\n"
     "6. Answers: if a separate ANSWER SHEET document is supplied, it is the authoritative "
     "source — match its answers to questions by question number and make every "
     "correct_index / accept_answers agree with it exactly, even if you would have answered "
@@ -177,8 +190,15 @@ SYSTEM = (
     "question: task instructions and word limits, lists of headings, word banks / boxes of "
     "options, example answers, and the text of any notes/table/flow-chart/summary-completion "
     "templates and diagram labels. Reproduce tables as markdown tables and keep gaps as "
-    "blanks like '________ (3)'. Never omit a heading list, option box, or instruction line.\n"
-    "10. For every reading and listening question, also fill `explanation` (2-3 plain "
+    "blanks like '________ (3)'. Never omit a heading list, option box, or instruction line."
+)
+
+# Optional enrichment: per-question explanations roughly double the output the
+# model must write, which is what makes imports slow. Off by default — the same
+# content is generated on demand (and cached) by POST /api/questions/{id}/explain
+# the first time a student opens an explanation.
+ENRICH_RULE = (
+    "\n10. For every reading and listening question, also fill `explanation` (2-3 plain "
     "sentences on why the correct answer is correct, noting why a common wrong choice is a "
     "trap), `support_sentences` (the exact sentence(s) copied verbatim from passage_md "
     "that justify the answer) and `paraphrases` (1-3 pairs showing how the question "
@@ -186,6 +206,23 @@ SYSTEM = (
     "passage_phrase copied VERBATIM from passage_md). Leave all three empty for "
     "writing/speaking questions."
 )
+
+_ENRICH_FIELDS = ("explanation", "support_sentences", "paraphrases")
+
+
+def _lean_tool(tool: dict) -> dict:
+    """A copy of TEST_TOOL without the enrichment fields, so a fast import's
+    schema doesn't invite the model to write them anyway."""
+    import copy
+    lean = copy.deepcopy(tool)
+    q_props = lean["input_schema"]["properties"]["sections"]["items"][
+        "properties"]["questions"]["items"]["properties"]
+    for f in _ENRICH_FIELDS:
+        q_props.pop(f, None)
+    return lean
+
+
+TEST_TOOL_LEAN = _lean_tool(TEST_TOOL)
 
 
 def _to_gemini_schema(node):
@@ -207,6 +244,7 @@ def _to_gemini_schema(node):
 
 
 _GEMINI_SCHEMA = _to_gemini_schema(TEST_TOOL["input_schema"])
+_GEMINI_SCHEMA_LEAN = _to_gemini_schema(TEST_TOOL_LEAN["input_schema"])
 
 
 
@@ -313,6 +351,12 @@ def _finalize(result: dict) -> dict:
                     q["answer_missing"] = not accepts
             q["qformat"] = qformat
 
+            # Task grouping: keep the instruction block as a plain stripped
+            # string (None when absent) — the test screen groups consecutive
+            # questions sharing the identical string into one task box.
+            ti = q.get("task_instructions")
+            q["task_instructions"] = ti.strip() if isinstance(ti, str) and ti.strip() else None
+
             # Keep sub_skill within the closed analytics vocab.
             if qtype == "explain":
                 q.pop("sub_skill", None)
@@ -413,13 +457,20 @@ def _validate_usable(result: dict) -> dict:
             "pages are legible.",
         )
 
+    # Count official question numbers, not rows: a multi-select "Choose N"
+    # question occupies N numbers (24-26) on the paper, so the total lines up
+    # with source_question_count and a full test reads 40.
     total = 0
-    missing = []  # global question numbers with no answer from the paper/key
+    missing = []  # official question-number labels with no answer from the paper/key
     for sec in sections:
         for q in sec.get("questions") or []:
-            total += 1
+            width = (
+                q.get("select_count") or len(q.get("correct_indices") or []) or 2
+            ) if q.get("qformat") == "multi_select" else 1
+            start = total + 1
+            total += width
             if q.get("answer_missing"):
-                missing.append(total)
+                missing.append(f"{start}" if width == 1 else f"{start}–{total}")
     src = result.pop("source_question_count", None)
     result["import_summary"] = {
         "total_questions": total,
@@ -463,7 +514,8 @@ ANSWER_SHEET_NOTE = (
 )
 
 
-def _run_gemini(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None) -> dict:
+def _run_gemini(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None,
+                enrich: bool = False) -> dict:
     if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(
             503,
@@ -493,13 +545,26 @@ def _run_gemini(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes]
     except Exception:  # noqa: BLE001 — older SDKs may not accept http_options
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    cfg = types.GenerateContentConfig(
-        system_instruction=SYSTEM,
+    cfg_kwargs = dict(
+        system_instruction=SYSTEM + (ENRICH_RULE if enrich else ""),
         response_mime_type="application/json",
-        response_schema=_GEMINI_SCHEMA,
+        response_schema=_GEMINI_SCHEMA if enrich else _GEMINI_SCHEMA_LEAN,
         temperature=0,  # deterministic: same file -> same structured test
         max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,  # full tests are long — avoid truncation
     )
+    # Import is pure extraction — the model copies questions and matches answers
+    # from the key (it never solves the test; rule 6 forbids guessing). Gemini
+    # 2.5's default "thinking" phase adds nothing here but more than doubles the
+    # import time, so it's off unless GEMINI_THINKING_BUDGET says otherwise.
+    try:
+        cfg = types.GenerateContentConfig(
+            **cfg_kwargs,
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=int(os.getenv("GEMINI_THINKING_BUDGET", "0")),
+            ),
+        )
+    except (TypeError, ValueError):  # older SDKs / models without thinking
+        cfg = types.GenerateContentConfig(**cfg_kwargs)
 
     # Gemini's free tier returns transient 503/429 spikes — retry with backoff.
     resp = _call_with_retries(
@@ -556,7 +621,8 @@ def _claude_file_blocks(file: UploadFile, data: bytes, label: str) -> list:
     return [{"type": "text", "text": f"{label}:\n\n{text}"}]
 
 
-def _run_claude(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None) -> dict:
+def _run_claude(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None,
+                enrich: bool = False) -> dict:
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise HTTPException(
             503,
@@ -581,8 +647,9 @@ def _run_claude(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes]
     resp = _call_with_retries(lambda: client.messages.create(
         model=MODEL,
         max_tokens=CLAUDE_MAX_OUTPUT_TOKENS,
-        system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
-        tools=[TEST_TOOL],
+        system=[{"type": "text", "text": SYSTEM + (ENRICH_RULE if enrich else ""),
+                 "cache_control": {"type": "ephemeral"}}],
+        tools=[TEST_TOOL if enrich else TEST_TOOL_LEAN],
         tool_choice={"type": "tool", "name": "build_ielts_test"},
         messages=[{"role": "user", "content": user_content}],
     ))
@@ -624,7 +691,8 @@ def _local_text(file: UploadFile, data: bytes) -> str:
     return text
 
 
-def _run_local(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None) -> dict:
+def _run_local(file: UploadFile, data: bytes, answers: tuple[UploadFile, bytes] | None = None,
+               enrich: bool = False) -> dict:
     """No-API fallback: extract text and drop it into one reading section so the
     teacher can build questions by hand. An answer sheet, if given, is appended
     so the teacher can copy answers in while building."""
@@ -664,6 +732,10 @@ async def _read_upload(file: UploadFile) -> bytes:
 async def ai_import(
     file: UploadFile = File(...),
     answer_sheet: UploadFile | None = File(None),
+    # Also generate per-question explanations during the import. Roughly doubles
+    # the AI output (= import time); off by default because explanations are
+    # generated on demand (and cached) the first time a student opens one.
+    enrich: bool = Form(False),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_role("teacher", "admin")),
     _rl: None = Depends(_ai_limiter),
@@ -680,4 +752,4 @@ async def ai_import(
     answers = None
     if answer_sheet is not None and (answer_sheet.filename or "").strip():
         answers = (answer_sheet, await _read_upload(answer_sheet))
-    return run(file, data, answers)
+    return run(file, data, answers, enrich=enrich)
