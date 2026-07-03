@@ -309,7 +309,6 @@ def reset_content(db):
     for model in (
         models.ErrorTag, models.Answer, models.StationAttempt, models.ExamAttempt,
         models.ReviewHistory, models.ReviewQueue, models.ExplanationReport,
-        models.ExamAccessLog, models.Feedback,
         models.Question, models.Station, models.Exam, models.Case,
         models.WritingComment, models.WritingSubmission, models.SpeakingSubmission,
         models.WritingTask, models.SpeakingTask,
