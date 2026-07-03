@@ -162,7 +162,7 @@ async def submit(
     )
     db.add(sub)
     db.commit()
-    return {"id": sub.id, "status": sub.status, "audio_url": audio_url}
+    return {"id": sub.id, "status": sub.status, "audio_url": storage.sign_media_url(audio_url)}
 
 
 @router.post("/submissions/{submission_id}/ai-grade")
@@ -216,7 +216,7 @@ def get_submission(
         "task_prompt": s.task.prompt_md if s.task else None,
         "part": s.task.part if s.task else None,
         "transcript": s.transcript,
-        "audio_url": s.audio_url,
+        "audio_url": storage.sign_media_url(s.audio_url),
         "status": ("reviewed" if visible else "submitted") if not is_teacher else s.status,
         "band": s.band if visible else None,
         "feedback": s.feedback if visible else None,
@@ -246,7 +246,7 @@ def my_submissions(
             "task_title": s.task.title if s.task else "Speaking task",
             "part": s.task.part if s.task else None,
             "transcript": s.transcript,
-            "audio_url": s.audio_url,
+            "audio_url": storage.sign_media_url(s.audio_url),
             "status": "reviewed" if visible else "submitted",
             "band": s.band if visible else None,
             "feedback": s.feedback if visible else None,

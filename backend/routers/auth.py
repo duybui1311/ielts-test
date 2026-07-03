@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import bcrypt
 from backend.service.database import get_db
 from backend.service import models
+from backend.service.ratelimit import rate_limit_ip
 from backend.service.auth_deps import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -32,6 +33,12 @@ class LoginOut(BaseModel):
 
 
 MIN_PASSWORD_LEN = 8
+
+# Brute-force protection: per-IP windows on the public auth endpoints.
+_login_limiter = rate_limit_ip(
+    8, 60, "Too many sign-in attempts. Please wait {retry}s and try again.")
+_register_limiter = rate_limit_ip(
+    5, 300, "Too many sign-up attempts. Please wait {retry}s and try again.")
 
 
 def validate_password(plain: Optional[str]) -> None:
@@ -67,7 +74,8 @@ def verify_password(plain: str, stored_hash: Optional[str]) -> bool:
 
 
 @router.post("/login", response_model=LoginOut)
-def login(payload: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
+def login(payload: LoginIn, db: Session = Depends(get_db),
+          _rl: None = Depends(_login_limiter)) -> LoginOut:
     identifier = (payload.email or "").strip().lower()
     if not identifier:
         raise HTTPException(
@@ -98,7 +106,8 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
 
 
 @router.post("/register", response_model=LoginOut, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterIn, db: Session = Depends(get_db)) -> LoginOut:
+def register(payload: RegisterIn, db: Session = Depends(get_db),
+             _rl: None = Depends(_register_limiter)) -> LoginOut:
     email = (payload.email or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A valid email is required.")

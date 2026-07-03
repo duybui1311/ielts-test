@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.service.database import get_db
-from backend.service import models
+from backend.service import models, storage
 from backend.service.autograde import autograde_exam_attempt
 from backend.service.auth_deps import get_current_user
 
@@ -66,8 +66,8 @@ def _build_content(exam, attempt_id, db):
             "skill": station.skill,
             "title": station.case.title,
             "passage_md": station.case.body_md,
-            "audio_url": station.audio_url,
-            "image_url": station.image_url,
+            "audio_url": storage.sign_media_url(station.audio_url),
+            "image_url": storage.sign_media_url(station.image_url),
             "questions": questions,
         })
     return sections

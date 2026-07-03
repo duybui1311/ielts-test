@@ -46,7 +46,7 @@ class SubmissionIn(BaseModel):
 def _task_out(t: models.WritingTask):
     return {
         "id": t.id, "task_type": t.task_type, "title": t.title,
-        "prompt_md": t.prompt_md, "image_url": t.image_url,
+        "prompt_md": t.prompt_md, "image_url": storage.sign_media_url(t.image_url),
         "time_limit_min": t.time_limit_min, "min_words": t.min_words,
     }
 
@@ -169,7 +169,7 @@ async def upload_task_image(
         raise HTTPException(502, f"Upload failed: {e}")
     task.image_url = url
     db.commit()
-    return {"image_url": url}
+    return {"image_url": storage.sign_media_url(url)}
 
 
 @router.post("/submissions")
@@ -249,7 +249,7 @@ def get_submission(
         "task_title": s.task.title if s.task else "Writing task",
         "task_prompt": s.task.prompt_md if s.task else None,
         "task_type": s.task.task_type if s.task else None,
-        "image_url": s.task.image_url if s.task else None,
+        "image_url": storage.sign_media_url(s.task.image_url) if s.task else None,
         "response_text": s.response_text,
         "word_count": s.word_count,
         "status": ("reviewed" if visible else "submitted") if not is_teacher else s.status,

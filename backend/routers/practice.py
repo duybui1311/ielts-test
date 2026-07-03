@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models
+from backend.service import models, storage
 from backend.service.auth_deps import get_current_user
 from backend.service.subskills import SUB_SKILLS, SUB_SKILL_LABELS, heatmap
 from backend.service.review_sched import enqueue_wrong
@@ -37,8 +37,8 @@ def _question_out(q: models.Question) -> dict:
         "sub_skill": q.sub_skill,
         "skill": station.skill if station else None,
         "passage_md": station.case.body_md if station and station.case else "",
-        "audio_url": station.audio_url if station else None,
-        "image_url": station.image_url if station else None,
+        "audio_url": storage.sign_media_url(station.audio_url) if station else None,
+        "image_url": storage.sign_media_url(station.image_url) if station else None,
     }
 
 

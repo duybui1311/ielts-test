@@ -17,6 +17,8 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg2://test:test@localhost:5432/test"
 )
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-that-is-definitely-long-enough-123456")
+# Test fixtures sign in far more often than any human — skip the per-IP window.
+os.environ.setdefault("AUTH_RATE_LIMIT_DISABLED", "1")
 
 import pytest
 from fastapi.testclient import TestClient

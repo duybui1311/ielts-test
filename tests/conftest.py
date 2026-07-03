@@ -9,3 +9,5 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg2://u:p@localhost:5432/testdb")
 os.environ.setdefault("JWT_SECRET", "test-secret-test-secret-test-secret-1234")
+# Test fixtures sign in far more often than any human — skip the per-IP window.
+os.environ.setdefault("AUTH_RATE_LIMIT_DISABLED", "1")
