@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.service.database import get_db
-from backend.service import models, storage
+from backend.service import models, scoping, storage
 from backend.service.autograde import autograde_exam_attempt
 from backend.service.auth_deps import get_current_user
 
@@ -77,8 +77,12 @@ def _build_content(exam, attempt_id, db):
 
 @router.get("/api/exams")
 def list_exams(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    q = db.query(models.Exam)
+    if scoping.is_student(user):
+        # Students only see tests assigned to classes they joined.
+        q = q.filter(models.Exam.class_id.in_(scoping.enrolled_class_ids(db, user.id)))
     exams = (
-        db.query(models.Exam)
+        q
         # Eager-load stations + questions in two batched queries instead of
         # lazy-loading per exam/station (each lazy load is a full round-trip
         # to the remote DB — this endpoint was the slow part of the test list).
@@ -126,6 +130,8 @@ def start_attempt(
     )
     if not exam:
         raise HTTPException(404, "Exam not found")
+    if scoping.is_student(user) and exam.class_id not in scoping.enrolled_class_ids(db, user.id):
+        raise HTTPException(403, "Join this test's class first (ask your teacher for the class code).")
 
     existing = (
         db.query(models.ExamAttempt)
@@ -439,3 +445,35 @@ def get_results(
             for k, v in sorted(weakness_map.items(), key=lambda x: -x[1])
         ],
     }
+
+
+# ── Join a class with the teacher's share code ──────────────────────────────
+
+class JoinClassIn(BaseModel):
+    code: str
+
+
+@router.post("/api/classes/join")
+def join_class(
+    payload: JoinClassIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    code = (payload.code or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Enter the class code your teacher shared.")
+    klass = db.query(models.Class).filter(models.Class.join_code == code).first()
+    if not klass:
+        raise HTTPException(404, "No class with that code — check it with your teacher.")
+    existing = (
+        db.query(models.ClassEnrolment)
+        .filter(
+            models.ClassEnrolment.class_id == klass.id,
+            models.ClassEnrolment.user_id == user.id,
+        )
+        .first()
+    )
+    if not existing:
+        db.add(models.ClassEnrolment(class_id=klass.id, user_id=user.id))
+        db.commit()
+    return {"ok": True, "class_id": klass.id, "class_name": klass.name}

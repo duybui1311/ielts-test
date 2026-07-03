@@ -4,11 +4,13 @@ Owner-scoped via the verified JWT (teacher/admin). Degrades to empty
 structures so the page renders for a teacher with no classes yet.
 """
 from collections import defaultdict
-from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
-from backend.service import models
+from backend.service import models, scoping
 from backend.service.auth_deps import require_role
 from backend.service.subskills import heatmap as subskill_heatmap
 
@@ -34,7 +36,38 @@ def teacher_classes(
         .order_by(models.Class.name.asc())
         .all()
     )
-    return [{"id": c.id, "name": c.name} for c in classes]
+    counts = {
+        cid: n for cid, n in (
+            db.query(models.ClassEnrolment.class_id, func.count(models.ClassEnrolment.id))
+            .filter(models.ClassEnrolment.class_id.in_([c.id for c in classes] or [0]))
+            .group_by(models.ClassEnrolment.class_id)
+            .all()
+        )
+    }
+    return [
+        {"id": c.id, "name": c.name, "join_code": c.join_code,
+         "students": counts.get(c.id, 0)}
+        for c in classes
+    ]
+
+
+class ClassIn(BaseModel):
+    name: str
+
+
+@router.post("/classes", status_code=201)
+def create_class(
+    payload: ClassIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_role("teacher", "admin")),
+):
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(400, "The class needs a name.")
+    klass = models.Class(name=name, owner_id=user.id, join_code=scoping.new_join_code())
+    db.add(klass)
+    db.commit()
+    return {"id": klass.id, "name": klass.name, "join_code": klass.join_code, "students": 0}
 
 
 @router.get("/dashboard")

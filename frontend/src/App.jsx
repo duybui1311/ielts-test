@@ -16,6 +16,10 @@ const Signup           = lazy(() => import("./pages/signup"));
 const Dashboard        = lazy(() => import("./pages/dashboard"));
 const TeacherDashboard = lazy(() => import("./pages/teacherDashboard"));
 const CreateNewExam    = lazy(() => import("./pages/CreateNewExam"));
+const ResetPassword    = lazy(() => import("./pages/ResetPassword"));
+const VerifyEmail      = lazy(() => import("./pages/VerifyEmail"));
+const Privacy          = lazy(() => import("./pages/Privacy"));
+const Terms            = lazy(() => import("./pages/Terms"));
 const FlashcardPage    = lazy(() => import("./pages/flashcard"));
 const ExamList         = lazy(() => import("./pages/ExamList"));
 const TestManage       = lazy(() => import("./pages/TestManage"));
@@ -123,6 +127,10 @@ export default function App() {
                         {/* Public */}
                         <Route path="/login" element={<Login />} />
                         <Route path="/signup" element={<Signup />} />
+                        <Route path="/reset-password" element={<ResetPassword />} />
+                        <Route path="/verify-email" element={<VerifyEmail />} />
+                        <Route path="/privacy" element={<Privacy />} />
+                        <Route path="/terms" element={<Terms />} />
 
                         {/* Private — all share the collapsible side navbar */}
                         <Route

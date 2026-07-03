@@ -3,41 +3,6 @@
 Spins the FastAPI app with an isolated SQLite DB per test (no lifespan, so the
 production Postgres engine is never touched) and drives the real HTTP endpoints.
 """
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-
-@pytest.fixture
-def client():
-    import backend.service.models  # noqa: F401  (registers tables on Base)
-    from backend.service.database import Base, get_db
-    from backend.main import app
-
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
-    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-    def _override_get_db():
-        db = TestSession()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = _override_get_db
-    c = TestClient(app)                 # no context manager => lifespan not run
-    c.session_factory = TestSession
-    yield c
-    app.dependency_overrides.clear()
-
-
 def _seed_teacher(client, email="teacher@x.io", password="teachpass1"):
     from backend.service import models
     from backend.routers.auth import hash_password
@@ -156,9 +121,14 @@ def test_full_student_attempt_autograde_and_weakness(client):
     }
     exam_id = client.post("/api/tests/import", json=payload, headers=th).json()["exam_id"]
 
-    # Student registers, sees the exam, and starts an attempt.
+    # Student registers; the exam is invisible until they join its class.
     reg = client.post("/api/auth/register", json={"email": "learner@x.io", "password": "studentpass1"})
     sh = {"Authorization": f"Bearer {reg.json()['token']}"}
+    assert not any(e["id"] == exam_id for e in client.get("/api/exams", headers=sh).json())
+    code = next(c["join_code"] for c in client.get("/api/teacher/classes", headers=th).json()
+                if c["name"] == "Sandbox")
+    r = client.post("/api/classes/join", json={"code": code}, headers=sh)
+    assert r.status_code == 200, r.text
     assert any(e["id"] == exam_id for e in client.get("/api/exams", headers=sh).json())
 
     start = client.post("/api/attempts/start", json={"exam_id": exam_id}, headers=sh).json()
@@ -217,6 +187,11 @@ def test_practice_flow_records_session_and_enqueues_review(client):
     reg = client.post("/api/auth/register", json={"email": "prac@x.io", "password": "studentpass1"})
     sh = {"Authorization": f"Bearer {reg.json()['token']}"}
     student_id = reg.json()["user_id"]
+
+    # Practice pools are class-scoped: join the teacher's Sandbox class first.
+    code = next(c["join_code"] for c in client.get("/api/teacher/classes", headers=th).json()
+                if c["name"] == "Sandbox")
+    assert client.post("/api/classes/join", json={"code": code}, headers=sh).status_code == 200
 
     skills = {s["sub_skill"]: s for s in client.get("/api/practice/skills", headers=sh).json()}
     assert skills["gap_fill"]["available"] == 2

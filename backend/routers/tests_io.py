@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 from sqlalchemy.orm import Session
 import bcrypt
 from backend.service.database import get_db
-from backend.service import models, storage
+from backend.service import models, scoping, storage
 from backend.service.auth_deps import get_current_user, require_role
 from backend.service.subskills import SUB_SKILLS
 
@@ -130,7 +130,8 @@ def import_test(
             .first()
         )
         if not klass:
-            klass = models.Class(name="Sandbox", owner_id=created_by)
+            klass = models.Class(name="Sandbox", owner_id=created_by,
+                                 join_code=scoping.new_join_code())
             db.add(klass)
             db.flush()
         class_id = klass.id

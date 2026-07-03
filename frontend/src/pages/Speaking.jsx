@@ -85,6 +85,11 @@ export default function Speaking({ embedded = false }) {
     <Box>
       {!embedded && <PageHeader eyebrow="AI-graded" title="Speaking" subtitle="Record your answers and get teacher feedback." icon={<MicRoundedIcon />} />}
 
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+        By recording, you consent to your voice being stored securely and shared with your
+        teacher and our AI grading service to assess your answer. See the <a href="/privacy" style={{ color: "inherit" }}>Privacy Policy</a>.
+      </Typography>
+
       {!SR && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Live transcription works best in Chrome or Edge. You can still record audio
