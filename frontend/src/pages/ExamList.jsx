@@ -78,6 +78,7 @@ function ExamCard({ exam, skill, starting, onStart, index = 0 }) {
         </Stack>
 
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
+          {exam.is_mock && <Chip size="small" color="warning" label="MOCK" sx={{ fontWeight: 800 }} />}
           {(exam.skills || []).map((s) => <SkillChip key={s} skill={s} />)}
           <Chip label={exam.difficulty} size="small" variant="outlined" sx={{ textTransform: "capitalize" }} />
         </Stack>

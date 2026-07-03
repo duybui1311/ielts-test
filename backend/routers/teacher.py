@@ -44,9 +44,21 @@ def teacher_classes(
             .all()
         )
     }
+    members = {}
+    if classes:
+        rows = (
+            db.query(models.ClassEnrolment.class_id, models.User)
+            .join(models.User, models.ClassEnrolment.user_id == models.User.id)
+            .filter(models.ClassEnrolment.class_id.in_([c.id for c in classes]))
+            .all()
+        )
+        for cid, u in rows:
+            members.setdefault(cid, []).append(
+                {"id": u.id, "name": u.full_name or u.username or u.email})
     return [
         {"id": c.id, "name": c.name, "join_code": c.join_code,
-         "students": counts.get(c.id, 0)}
+         "students": counts.get(c.id, 0),
+         "members": members.get(c.id, [])}
         for c in classes
     ]
 

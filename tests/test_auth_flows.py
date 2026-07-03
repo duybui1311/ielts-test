@@ -60,3 +60,38 @@ def test_join_class_bad_code_404(client):
     out = _register(client, "joiner@x.io")
     h = {"Authorization": f"Bearer {out['token']}"}
     assert client.post("/api/classes/join", json={"code": "NOPE99"}, headers=h).status_code == 404
+
+
+def test_report_access_control(client):
+    from tests.test_integration_api import _seed_teacher, _token
+    email, pw = _seed_teacher(client)
+    th = {"Authorization": f"Bearer {_token(client, email, pw)}"}
+    # student in the teacher's Sandbox class (created by an import)
+    client.post("/api/tests/import", headers=th, json={
+        "name": "T", "sections": [{"position": 1, "skill": "reading", "title": "S",
+        "questions": [{"qtype": "short", "prompt": "Q", "accept_answers": ["a"]}]}]})
+    stu = _register(client, "kid@x.io")
+    sh = {"Authorization": f"Bearer {stu['token']}"}
+    code = next(c["join_code"] for c in client.get("/api/teacher/classes", headers=th).json())
+    client.post("/api/classes/join", json={"code": code}, headers=sh)
+
+    outsider = _register(client, "other@x.io")
+    oh = {"Authorization": f"Bearer {outsider['token']}"}
+
+    assert client.get(f"/api/report/student/{stu['user_id']}", headers=sh).status_code == 200
+    assert client.get(f"/api/report/student/{stu['user_id']}", headers=th).status_code == 200
+    assert client.get(f"/api/report/student/{stu['user_id']}", headers=oh).status_code == 403
+
+
+def test_mock_exam_type_roundtrip(client):
+    from tests.test_integration_api import _seed_teacher, _token
+    email, pw = _seed_teacher(client)
+    th = {"Authorization": f"Bearer {_token(client, email, pw)}"}
+    r = client.post("/api/tests/import", headers=th, json={
+        "name": "Mock 1", "exam_type": "exam",
+        "sections": [{"position": 1, "skill": "reading", "title": "S",
+        "questions": [{"qtype": "short", "prompt": "Q", "accept_answers": ["a"]}]}]})
+    exam_id = r.json()["exam_id"]
+    assert client.get(f"/api/tests/{exam_id}/export", headers=th).json()["exam_type"] == "exam"
+    assert any(e["id"] == exam_id and e["is_mock"]
+               for e in client.get("/api/exams", headers=th).json())

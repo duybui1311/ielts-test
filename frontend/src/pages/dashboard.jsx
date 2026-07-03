@@ -148,6 +148,14 @@ export default function Dashboard() {
             </Typography>
           </Box>
           <Stack direction="row" spacing={1.5} alignItems="center">
+            <Button
+              variant="outlined"
+              onClick={() => navigate(`/report/${localStorage.getItem("osce-user-id")}`)}
+              sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.6)",
+                "&:hover": { borderColor: "#fff", bgcolor: "rgba(255,255,255,0.08)" } }}
+            >
+              My report
+            </Button>
             {kpis.avg_band != null && (
               <Stack alignItems="center" sx={{ px: 2, py: 1.25, borderRadius: 3,
                 bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(6px)" }}>
