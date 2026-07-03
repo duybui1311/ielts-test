@@ -110,6 +110,7 @@ class TestIn(BaseModel):
     time_limit_min: int = 60
     reading_min: int = 0
     access_code: str = "1234"
+    exam_type: Literal["practice", "exam"] = "practice"   # "exam" = full mock test
     class_id: Optional[int] = None
     created_by: Optional[int] = None            # ignored — author comes from the token
     sections: List[SectionIn]
@@ -140,7 +141,7 @@ def import_test(
     exam = models.Exam(
         class_id=class_id,
         name=payload.name,
-        exam_type=models.ExamType.practice,
+        exam_type=models.ExamType(payload.exam_type),
         difficulty=models.DifficultyLevel(payload.difficulty),
         total_stations=len(payload.sections),
         time_limit_min=payload.time_limit_min,
@@ -359,6 +360,7 @@ def export_test(
         raise HTTPException(404, "Exam not found")
     out = {
         "name": exam.name,
+        "exam_type": exam.exam_type.value,
         "difficulty": exam.difficulty.value,
         "time_limit_min": exam.time_limit_min,
         "sections": [],

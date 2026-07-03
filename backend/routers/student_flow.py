@@ -98,6 +98,7 @@ def list_exams(db: Session = Depends(get_db), user: models.User = Depends(get_cu
         result.append({
             "id": exam.id,
             "name": exam.name,
+            "is_mock": exam.exam_type == models.ExamType.exam,
             "skills": skills,
             "time_limit_min": exam.time_limit_min,
             "total_questions": q_count,
@@ -437,6 +438,8 @@ def get_results(
 
     return {
         "attempt_id": attempt_id,
+        "is_mock": bool(ea.exam and ea.exam.exam_type == models.ExamType.exam),
+        "exam_name": ea.exam.name if ea.exam else None,
         "overall_band": ea.overall_band,
         "status": ea.status.value,
         "sections": sections,

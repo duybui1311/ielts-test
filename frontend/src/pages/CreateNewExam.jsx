@@ -150,6 +150,7 @@ export default function CreateNewExam() {
   const [difficulty, setDifficulty] = useState("medium");
   const [timeLimit, setTimeLimit] = useState(40);
   const [accessCode, setAccessCode] = useState("1234");
+  const [isMock, setIsMock] = useState(false);
   const [classId, setClassId] = useState("");
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState(() => [{ ...newSection(1), skill: skillParam || "reading" }]);
@@ -222,6 +223,7 @@ export default function CreateNewExam() {
         if (data.name) setName(data.name);
         if (data.difficulty) setDifficulty(data.difficulty);
         if (data.time_limit_min) setTimeLimit(data.time_limit_min);
+        setIsMock(data.exam_type === "exam");
         const secs = aiToSections(data);
         if (secs.length) {
           setSections(secs);
@@ -369,6 +371,7 @@ export default function CreateNewExam() {
       time_limit_min: Number(timeLimit) || 40,
       reading_min: 0,
       access_code: accessCode || "1234",
+      exam_type: isMock ? "exam" : "practice",
       class_id: classId || null,
       created_by,
       sections: sections.map((sec) => ({
@@ -535,6 +538,18 @@ export default function CreateNewExam() {
             <MenuItem value=""><em>Sandbox (default)</em></MenuItem>
             {classes.map((c) => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
           </TextField>
+          <FormControlLabel
+            sx={{ gridColumn: { sm: "1 / -1" } }}
+            control={<Checkbox checked={isMock} onChange={(e) => setIsMock(e.target.checked)} />}
+            label={
+              <Box>
+                <Typography variant="body2" fontWeight={600}>Full mock test</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Counts as an official-style sitting — students get a Band Report and it's badged MOCK in their test list.
+                </Typography>
+              </Box>
+            }
+          />
         </Box>
         </Collapse>
       </Card>

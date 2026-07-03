@@ -17,6 +17,7 @@ const Dashboard        = lazy(() => import("./pages/dashboard"));
 const TeacherDashboard = lazy(() => import("./pages/teacherDashboard"));
 const CreateNewExam    = lazy(() => import("./pages/CreateNewExam"));
 const ResetPassword    = lazy(() => import("./pages/ResetPassword"));
+const ProgressReport   = lazy(() => import("./pages/ProgressReport"));
 const VerifyEmail      = lazy(() => import("./pages/VerifyEmail"));
 const Privacy          = lazy(() => import("./pages/Privacy"));
 const Terms            = lazy(() => import("./pages/Terms"));
@@ -158,6 +159,7 @@ export default function App() {
                             <Route path="/review"              element={<ReviewRoute />} />
                             <Route path="/flashcard"           element={<FlashcardPage />} />
                             <Route path="/history"             element={<History />} />
+                            <Route path="/report/:userId"      element={<ProgressReport />} />
                             <Route path="/settings"            element={<Settings />} />
                             <Route path="/help"                element={<Help />} />
                         </Route>

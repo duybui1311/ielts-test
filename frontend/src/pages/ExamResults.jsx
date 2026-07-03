@@ -206,8 +206,10 @@ export default function ExamResults() {
   return (
     <Box>
       <PageHeader
-        title="Results"
-        subtitle="Your band score and per-question breakdown."
+        title={data.is_mock ? "Mock Test Band Report" : "Results"}
+        subtitle={data.is_mock
+          ? `${data.exam_name || "Full mock"} — official-style band report.`
+          : "Your band score and per-question breakdown."}
         action={
           <Button variant="outlined" onClick={() => navigate("/exams")}>
             Back to Tests
@@ -225,9 +227,17 @@ export default function ExamResults() {
         }}
       >
         <Typography variant="overline" color="text.secondary" letterSpacing={2}>
-          Overall Band Score
+          {data.is_mock ? "Mock Test — Overall Band" : "Overall Band Score"}
         </Typography>
         <BandCircle band={data.overall_band} />
+        {data.is_mock && (
+          <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+            {(data.sections || []).filter((s) => s.band != null).map((s) => (
+              <Chip key={s.station_id} label={`${s.skill}: ${s.band}`} size="small" variant="outlined"
+                sx={{ textTransform: "capitalize", fontWeight: 700 }} />
+            ))}
+          </Stack>
+        )}
         <Typography variant="body2" color="text.secondary">
           {data.status === "graded"
             ? "Test completed and graded"

@@ -20,7 +20,7 @@ import { BlurText } from "../component/TextReveal";
 import Heatmap from "../component/Heatmap";
 
 /** Teacher's classes with their share codes — students join with these. */
-function ClassCodesCard() {
+function ClassCodesCard({ navigate }) {
   const [classes, setClasses] = useState(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,6 +65,10 @@ function ClassCodesCard() {
           <Stack key={c.id} direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
             <Typography variant="body2" fontWeight={600} sx={{ minWidth: 140 }}>{c.name}</Typography>
             <Chip size="small" variant="outlined" label={`${c.students} student${c.students === 1 ? "" : "s"}`} />
+            {(c.members || []).map((m) => (
+              <Chip key={m.id} size="small" label={m.name} onClick={() => navigate(`/report/${m.id}`)}
+                sx={{ cursor: "pointer" }} />
+            ))}
             {c.join_code && (
               <MuiTooltip title={copied === c.join_code ? "Copied!" : "Copy class code"}>
                 <Chip
@@ -190,7 +194,7 @@ export default function TeacherDashboard() {
         <StatCard icon={<PendingActionsRoundedIcon />} label="To review" value={kpis.to_review} gradient={theme.gradients.sunset} color="warning.main" delay={280} />
       </Box>
 
-      <ClassCodesCard />
+      <ClassCodesCard navigate={navigate} />
 
       {!hasClasses ? (
         <Card sx={{ p: 5, textAlign: "center" }}>

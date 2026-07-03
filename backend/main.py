@@ -15,7 +15,7 @@ from .routers import (
     auth, tests_io, autograde, analytics, student_flow,
     dashboard, me, flashcards, teacher,
     writing, speaking, review, ai_import, admin,
-    questions, practice,
+    questions, practice, report,
 )
 
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
@@ -121,6 +121,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(questions.router)
     app.include_router(practice.router)
+    app.include_router(report.router)
 
     # Serve uploaded speaking audio.
     os.makedirs(UPLOAD_DIR, exist_ok=True)
