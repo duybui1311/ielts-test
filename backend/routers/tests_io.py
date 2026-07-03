@@ -208,7 +208,7 @@ def _exam_attempt_count(db: Session, exam_id: int) -> int:
 
 def _delete_exam_graph(db: Session, exam: models.Exam) -> None:
     """Delete an exam and everything that references it (attempts, answers,
-    error tags, access logs, stations/cases/questions). No ON DELETE CASCADE in
+    error tags, stations/cases/questions). No ON DELETE CASCADE in
     the schema, so we remove dependents explicitly, child-first."""
     # ErrorTags reference answers/station_attempts/stations, so remove them first.
     db.query(models.ErrorTag).filter(models.ErrorTag.exam_id == exam.id).delete(
@@ -231,10 +231,6 @@ def _delete_exam_graph(db: Session, exam: models.Exam) -> None:
             ).delete(synchronize_session=False)
             db.delete(sa)
         db.delete(ea)
-    db.query(models.ExamAccessLog).filter(
-        models.ExamAccessLog.exam_id == exam.id
-    ).delete(synchronize_session=False)
-
     case_ids = [st.case_id for st in exam.stations]
     db.delete(exam)              # stations + questions cascade (delete-orphan)
     db.flush()

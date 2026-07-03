@@ -84,12 +84,6 @@ class User(Base):
     exam_attempts: Mapped[List["ExamAttempt"]] = relationship(
         "ExamAttempt", back_populates="candidate"
     )
-    feedback_given: Mapped[List["Feedback"]] = relationship(
-        "Feedback", back_populates="teacher"
-    )
-    access_logs: Mapped[List["ExamAccessLog"]] = relationship(
-        "ExamAccessLog", back_populates="user"
-    )
     flashcard_decks: Mapped[List["FlashcardDeck"]] = relationship(
         "FlashcardDeck", back_populates="owner"
     )
@@ -184,9 +178,6 @@ class Exam(Base):
     exam_attempts: Mapped[List["ExamAttempt"]] = relationship(
         "ExamAttempt", back_populates="exam"
     )
-    access_logs: Mapped[List["ExamAccessLog"]] = relationship(
-        "ExamAccessLog", back_populates="exam"
-    )
 
 class Station(Base):
     __tablename__ = "stations"
@@ -221,7 +212,6 @@ class Question(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     options_json: Mapped[Optional[list]] = mapped_column(JSON)
     correct_index: Mapped[Optional[int]] = mapped_column(Integer)
-    reference_text: Mapped[Optional[str]] = mapped_column(Text)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # IELTS additions:
     sub_skill: Mapped[Optional[str]] = mapped_column(String(50))    # e.g. matching_headings, gap_fill
@@ -312,9 +302,6 @@ class StationAttempt(Base):
     answers: Mapped[List["Answer"]] = relationship(
         "Answer", back_populates="station_attempt", cascade="all, delete-orphan"
     )
-    feedbacks: Mapped[List["Feedback"]] = relationship(
-        "Feedback", back_populates="station_attempt", cascade="all, delete-orphan"
-    )
 
 class Answer(Base):
     __tablename__ = "answers"
@@ -337,32 +324,6 @@ class Answer(Base):
     question: Mapped["Question"] = relationship("Question", back_populates="answers")
 
 # -------------------- FEEDBACK --------------------
-
-class Feedback(Base):
-    __tablename__ = "feedback"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station_attempt_id: Mapped[int] = mapped_column(
-        ForeignKey("station_attempts.id"), nullable=False
-    )
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    station_attempt: Mapped["StationAttempt"] = relationship(
-        "StationAttempt", back_populates="feedbacks"
-    )
-    teacher: Mapped["User"] = relationship("User", back_populates="feedback_given")
-
-class ExamAccessLog(Base):
-    __tablename__ = "exam_access_logs"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    exam_id: Mapped[int] = mapped_column(ForeignKey("exams.id"), nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    ip: Mapped[Optional[str]] = mapped_column(String(64))
-    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
-    accepted_integrity: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    verified_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    exam: Mapped["Exam"] = relationship("Exam", back_populates="access_logs")
-    user: Mapped["User"] = relationship("User", back_populates="access_logs")
 
 # -------------------- FLASHCARDS --------------------
 

@@ -17,3 +17,5 @@ frontend.log
 frontend.err
 uvicorn.log
 uvicorn.err
+.autoqa/
+acceptance_criteria.txt
