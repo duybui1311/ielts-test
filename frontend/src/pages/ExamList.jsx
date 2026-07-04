@@ -32,8 +32,14 @@ const TABS = [
   { key: "speaking", label: "Speaking", icon: <MicRoundedIcon />, ai: true },
 ];
 
-function ExamCard({ exam, skill, starting, onStart, index = 0 }) {
+function ExamCard({ exam, skill, starting, onStart, onResults, index = 0 }) {
   const hex = skillHex(skill);
+  const latest = exam.latest_attempt;
+  const finished = latest && latest.status !== "draft";
+  const inProgress = latest && latest.status === "draft";
+  // Mock tests are once-only, like the real exam; practice tests can be retaken.
+  const canRetake = finished && !exam.is_mock;
+  const startLabel = inProgress ? "Continue" : canRetake ? "Retake" : "Start Test";
   return (
     <Card
       component={motion.div}
@@ -94,16 +100,30 @@ function ExamCard({ exam, skill, starting, onStart, index = 0 }) {
           </Stack>
         </Stack>
       </CardContent>
-      <CardActions sx={{ px: 2, pb: 2 }}>
-        <Button variant="contained" fullWidth disabled={starting === exam.id} onClick={() => onStart(exam.id)}>
-          {starting === exam.id ? "Starting…" : "Start Test"}
-        </Button>
+      <CardActions sx={{ px: 2, pb: 2, gap: 1 }}>
+        {finished && exam.is_mock ? (
+          // A finished mock is done for good — only its band report remains.
+          <Button variant="outlined" fullWidth onClick={() => onResults(latest.id)}>
+            View Results{latest.band != null ? ` · Band ${latest.band}` : ""}
+          </Button>
+        ) : (
+          <>
+            <Button variant="contained" fullWidth disabled={starting === exam.id} onClick={() => onStart(exam.id)}>
+              {starting === exam.id ? "Starting…" : startLabel}
+            </Button>
+            {canRetake && (
+              <Button variant="outlined" sx={{ flexShrink: 0 }} onClick={() => onResults(latest.id)}>
+                {latest.band != null ? `Band ${latest.band}` : "Results"}
+              </Button>
+            )}
+          </>
+        )}
       </CardActions>
     </Card>
   );
 }
 
-function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, heading = null }) {
+function ExamGrid({ exams, skill, starting, onStart, onResults, hideWhenEmpty = false, heading = null }) {
   const list = exams.filter((e) => ((e.skills && e.skills[0]) || "reading") === skill);
   if (list.length === 0) {
     if (hideWhenEmpty) return null;
@@ -127,7 +147,7 @@ function ExamGrid({ exams, skill, starting, onStart, hideWhenEmpty = false, head
       {heading && <Typography variant="subtitle1" sx={{ mb: 1.5 }}>{heading}</Typography>}
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 2 }}>
         {list.map((exam, i) => (
-          <ExamCard key={exam.id} exam={exam} skill={skill} starting={starting} onStart={onStart} index={i} />
+          <ExamCard key={exam.id} exam={exam} skill={skill} starting={starting} onStart={onStart} onResults={onResults} index={i} />
         ))}
       </Box>
     </Box>
@@ -185,6 +205,8 @@ export default function ExamList() {
       setJoining(false);
     }
   };
+
+  const handleResults = (attemptId) => navigate(`/results/${attemptId}`);
 
   const handleStart = async (examId) => {
     const userId = parseInt(localStorage.getItem("osce-user-id"), 10);
@@ -276,17 +298,17 @@ export default function ExamList() {
         ))}
       </Tabs>
 
-      {skill === "reading" && <ExamGrid exams={exams} skill="reading" starting={starting} onStart={handleStart} />}
-      {skill === "listening" && <ExamGrid exams={exams} skill="listening" starting={starting} onStart={handleStart} />}
+      {skill === "reading" && <ExamGrid exams={exams} skill="reading" starting={starting} onStart={handleStart} onResults={handleResults} />}
+      {skill === "listening" && <ExamGrid exams={exams} skill="listening" starting={starting} onStart={handleStart} onResults={handleResults} />}
       {skill === "writing" && (
         <>
-          <ExamGrid exams={exams} skill="writing" starting={starting} onStart={handleStart} hideWhenEmpty heading="Exam-based tests" />
+          <ExamGrid exams={exams} skill="writing" starting={starting} onStart={handleStart} onResults={handleResults} hideWhenEmpty heading="Exam-based tests" />
           <Writing embedded />
         </>
       )}
       {skill === "speaking" && (
         <>
-          <ExamGrid exams={exams} skill="speaking" starting={starting} onStart={handleStart} hideWhenEmpty heading="Exam-based tests" />
+          <ExamGrid exams={exams} skill="speaking" starting={starting} onStart={handleStart} onResults={handleResults} hideWhenEmpty heading="Exam-based tests" />
           <Speaking embedded />
         </>
       )}

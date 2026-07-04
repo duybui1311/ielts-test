@@ -253,8 +253,12 @@ class Question(Base):
 
 class ExamAttempt(Base):
     __tablename__ = "exam_attempts"
+    # Retakes: a student may attempt the same practice test many times, so
+    # (exam_id, user_id) is deliberately NOT unique — just indexed for the
+    # "latest attempt per exam" lookups. Mock tests stay once-only, enforced
+    # in the start endpoint (a product rule, not a schema one).
     __table_args__ = (
-        UniqueConstraint("exam_id", "user_id", name="uq_exam_user"),
+        Index("ix_exam_attempts_exam_user", "exam_id", "user_id"),
         Index("ix_exam_attempts_user", "user_id"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

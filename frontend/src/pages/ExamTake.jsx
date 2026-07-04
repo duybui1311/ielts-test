@@ -18,6 +18,7 @@ import { SkillChip } from "../component/ui";
 import { TOPBAR_HEIGHT } from "../component/TopBar";
 import HighlightedText, { normalizeFragment } from "../component/HighlightedText";
 import QuestionInput, { parsePicked } from "../component/QuestionInput";
+import PlayOnceAudio from "../component/PlayOnceAudio";
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
@@ -467,13 +468,21 @@ export default function ExamTake() {
           )}
         </Stack>
         {hasAudio && (
-          <Box
-            component="audio"
-            controls
-            preload="metadata"
-            src={mediaSrc(sec.audio_url)}
-            sx={{ width: "100%", mb: hasText ? 2 : 0 }}
-          />
+          examData?.is_mock ? (
+            /* Mock tests: the recording plays once, like the official exam. */
+            <PlayOnceAudio
+              src={mediaSrc(sec.audio_url)}
+              storageKey={`exam-audio-${attemptId}-${sec.station_id}`}
+            />
+          ) : (
+            <Box
+              component="audio"
+              controls
+              preload="metadata"
+              src={mediaSrc(sec.audio_url)}
+              sx={{ width: "100%", mb: hasText ? 2 : 0 }}
+            />
+          )
         )}
         {hasImage && (
           <Box

@@ -13,6 +13,8 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': 'http://localhost:8000',
+      // Legacy local media (e.g. seeded listening audio) served by the backend.
+      '/uploads': 'http://localhost:8000',
     },
   },
   build: {

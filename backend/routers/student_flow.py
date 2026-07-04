@@ -110,11 +110,25 @@ def list_exams(db: Session = Depends(get_db), user: models.User = Depends(get_cu
         .order_by(models.Exam.created_at.desc())
         .all()
     )
+    # The caller's attempt state per exam (one query), so the list can offer
+    # Start / Continue / Retake / Results without extra round-trips.
+    latest_by_exam: dict[int, models.ExamAttempt] = {}
+    attempt_counts: dict[int, int] = {}
+    for a in (
+        db.query(models.ExamAttempt)
+        .filter(models.ExamAttempt.user_id == user.id)
+        .order_by(models.ExamAttempt.id)
+        .all()
+    ):
+        latest_by_exam[a.exam_id] = a  # ascending order: last write wins
+        attempt_counts[a.exam_id] = attempt_counts.get(a.exam_id, 0) + 1
+
     result = []
     for exam in exams:
         # Count official question numbers, not DB rows (multi-select spans N).
         q_count = sum(q.marks for st in exam.stations for q in st.questions)
         skills = list({st.skill for st in exam.stations if st.skill})
+        latest = latest_by_exam.get(exam.id)
         result.append({
             "id": exam.id,
             "name": exam.name,
@@ -123,6 +137,12 @@ def list_exams(db: Session = Depends(get_db), user: models.User = Depends(get_cu
             "time_limit_min": exam.time_limit_min,
             "total_questions": q_count,
             "difficulty": exam.difficulty.value,
+            "attempt_count": attempt_counts.get(exam.id, 0),
+            "latest_attempt": {
+                "id": latest.id,
+                "status": latest.status.value,
+                "band": latest.overall_band,
+            } if latest else None,
         })
     return result
 
@@ -154,17 +174,24 @@ def start_attempt(
     if scoping.is_student(user) and exam.class_id not in scoping.enrolled_class_ids(db, user.id):
         raise HTTPException(403, "Join this test's class first (ask your teacher for the class code).")
 
-    existing = (
+    latest = (
         db.query(models.ExamAttempt)
         .filter(
             models.ExamAttempt.exam_id == payload.exam_id,
             models.ExamAttempt.user_id == user.id,
         )
+        .order_by(models.ExamAttempt.id.desc())
         .first()
     )
-    if existing:
-        attempt = existing
+    if latest and latest.status == models.AttemptStatus.draft:
+        # An unfinished attempt always resumes — never silently restart it.
+        attempt = latest
+    elif latest and exam.exam_type == models.ExamType.exam:
+        # Mock tests are once-only, like the real exam: hand back the finished
+        # attempt; the frontend routes submitted/graded attempts to results.
+        attempt = latest
     else:
+        # First attempt, or a retake of a finished practice test.
         attempt = models.ExamAttempt(
             exam_id=payload.exam_id,
             user_id=user.id,
@@ -186,6 +213,7 @@ def start_attempt(
         "attempt_id": attempt.id,
         "exam_id": exam.id,
         "exam_name": exam.name,
+        "is_mock": exam.exam_type == models.ExamType.exam,
         "time_limit_min": exam.time_limit_min,
         # Server-anchored clock: the frontend counts down from this, so a
         # refresh resumes the real remaining time instead of restarting it.
@@ -225,6 +253,7 @@ def get_content(
         "attempt_id": attempt.id,
         "exam_id": exam.id,
         "exam_name": exam.name,
+        "is_mock": exam.exam_type == models.ExamType.exam,
         "time_limit_min": exam.time_limit_min,
         "seconds_left": max(0, left) if left is not None else None,
         "status": attempt.status.value,
