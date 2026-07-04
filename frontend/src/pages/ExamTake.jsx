@@ -154,7 +154,9 @@ export default function ExamTake() {
         }
       }
       setAnswers(init);
-      setTimeLeft((examData.time_limit_min || 60) * 60);
+      // Server-anchored clock: seconds_left counts from the attempt's real
+      // start, so refreshing the page doesn't restart the timer.
+      setTimeLeft(examData.seconds_left ?? (examData.time_limit_min || 60) * 60);
       return;
     }
     apiFetch(`/api/attempts/${attemptId}/content`)
@@ -172,7 +174,7 @@ export default function ExamTake() {
           }
         }
         setAnswers(init);
-        setTimeLeft((data.time_limit_min || 60) * 60);
+        setTimeLeft(data.seconds_left ?? (data.time_limit_min || 60) * 60);
       })
       .catch(() => setError("Could not load exam."))
       .finally(() => setLoading(false));
@@ -240,7 +242,16 @@ export default function ExamTake() {
         value_text: valueText ?? null,
       }),
     })
-      .then((r) => setSaveState(r.ok ? "saved" : "error"))
+      .then((r) => {
+        if (r.status === 409) {
+          // Time ran out (or the attempt was submitted in another tab) —
+          // submit now so the student lands on their results instead of
+          // silently losing answers.
+          handleSubmitRef.current?.();
+          return;
+        }
+        setSaveState(r.ok ? "saved" : "error");
+      })
       .catch(() => setSaveState("error"));
   }, [attemptId]);
 

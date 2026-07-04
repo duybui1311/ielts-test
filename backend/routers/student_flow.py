@@ -16,6 +16,26 @@ def _owns_or_teacher(attempt: models.ExamAttempt, user: models.User) -> bool:
     return attempt.user_id == user.id or user.role in (models.UserRole.teacher, models.UserRole.admin)
 
 
+# Answers are still accepted this long after the clock hits zero, so a save
+# that was in flight when the frontend auto-submitted isn't lost to latency.
+ANSWER_GRACE_SECONDS = 30
+
+
+def _seconds_left(attempt: models.ExamAttempt, exam: models.Exam) -> Optional[int]:
+    """Seconds remaining on the attempt's server-side clock (negative when past
+    the limit). Anchored to ExamAttempt.started_at, so refreshing the page can't
+    restart the timer. None = no time limit to enforce."""
+    if not exam or not exam.time_limit_min:
+        return None
+    started = attempt.started_at
+    if started is None:  # legacy rows before started_at existed
+        return None
+    if started.tzinfo is None:  # column is stored as naive UTC
+        started = started.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+    return int(exam.time_limit_min * 60 - elapsed)
+
+
 def _build_content(exam, attempt_id, db):
     """Sections with questions — correct answers stripped out."""
     sa_map = {
@@ -161,11 +181,15 @@ def start_attempt(
         db.commit()
 
     content = _build_content(exam, attempt.id, db)
+    left = _seconds_left(attempt, exam)
     return {
         "attempt_id": attempt.id,
         "exam_id": exam.id,
         "exam_name": exam.name,
         "time_limit_min": exam.time_limit_min,
+        # Server-anchored clock: the frontend counts down from this, so a
+        # refresh resumes the real remaining time instead of restarting it.
+        "seconds_left": max(0, left) if left is not None else None,
         "status": attempt.status.value,
         "sections": content,
     }
@@ -196,11 +220,13 @@ def get_content(
         .first()
     )
     content = _build_content(exam, attempt.id, db)
+    left = _seconds_left(attempt, exam)
     return {
         "attempt_id": attempt.id,
         "exam_id": exam.id,
         "exam_name": exam.name,
         "time_limit_min": exam.time_limit_min,
+        "seconds_left": max(0, left) if left is not None else None,
         "status": attempt.status.value,
         "sections": content,
     }
@@ -226,6 +252,17 @@ def save_answer(
         raise HTTPException(404, "Attempt not found")
     if not _owns_or_teacher(ea, user):
         raise HTTPException(403, "Not allowed.")
+
+    # Server-side timer enforcement: a submitted/graded attempt, or one whose
+    # clock ran out (plus a small grace for in-flight saves), takes no more
+    # answers — the client-side countdown alone is trivially bypassed.
+    if ea.status != models.AttemptStatus.draft:
+        raise HTTPException(409, "This test was already submitted.")
+    exam = db.query(models.Exam).filter(models.Exam.id == ea.exam_id).first()
+    left = _seconds_left(ea, exam)
+    if left is not None and left < -ANSWER_GRACE_SECONDS:
+        raise HTTPException(409, "Time is up — this test no longer accepts answers.")
+
     q = db.query(models.Question).filter(
         models.Question.id == payload.question_id
     ).first()
