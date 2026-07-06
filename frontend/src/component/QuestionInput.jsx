@@ -21,6 +21,45 @@ export function parsePicked(valueText) {
 const GAP_RE = /_{3,}/;
 
 /**
+ * Parse the word limit from a task's instructions ("Write ONE WORD ONLY…",
+ * "NO MORE THAN TWO WORDS…"). Returns {limit, allowsNumber} or null when the
+ * instructions don't state one.
+ */
+export function wordLimitFromInstructions(instructions) {
+  const t = (instructions || "").toUpperCase();
+  const words = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4 };
+  const m = t.match(/(?:NO MORE THAN |)(ONE|TWO|THREE|FOUR) WORDS?(?: ONLY|\b)/);
+  if (!m) return null;
+  return { limit: words[m[1]], allowsNumber: /NUMBER/.test(t) };
+}
+
+/** Count the words in an answer the way IELTS markers do: whitespace-separated
+ * tokens; hyphenated words count as one; pure numbers are skipped when the
+ * instructions allow "…AND/OR A NUMBER". */
+export function countAnswerWords(answer, allowsNumber = false) {
+  const tokens = (answer || "").trim().split(/\s+/).filter(Boolean);
+  if (!allowsNumber) return tokens.length;
+  return tokens.filter((tok) => !/^[0-9.,:%-]+$/.test(tok)).length;
+}
+
+/** Over-limit warning under a text answer, e.g. "The instructions allow ONE
+ * word — this answer has 3." Warns only; never blocks typing. */
+function WordLimitHint({ instructions, value }) {
+  const rule = wordLimitFromInstructions(instructions);
+  if (!rule) return null;
+  const used = countAnswerWords(value, rule.allowsNumber);
+  if (used <= rule.limit) return null;
+  const names = { 1: "ONE word", 2: "TWO words", 3: "THREE words", 4: "FOUR words" };
+  return (
+    <Typography variant="caption" color="error.main" sx={{ display: "block", mt: 0.5 }}>
+      The instructions allow {names[rule.limit]}
+      {rule.allowsNumber ? " (and/or a number)" : ""} — this answer has {used} words
+      and would score zero on the real test.
+    </Typography>
+  );
+}
+
+/**
  * Render a question's answer input in its native IELTS format (`q.qformat`):
  * - tfng / ynng  → three tap buttons
  * - matching     → dropdown over the shared list (labelled A, B, C…)
@@ -130,24 +169,27 @@ export default function QuestionInput({ question: q, value = {}, onChange, onCom
       const before = q.prompt.slice(0, m.index);
       const after = q.prompt.slice(m.index + m[0].length);
       return (
-        <Typography variant="body2" component="div" sx={{ mt: 1, lineHeight: 2.4 }}>
-          {before}
-          <TextField
-            variant="standard"
-            size="small"
-            disabled={disabled}
-            value={value.value_text ?? ""}
-            onChange={(e) => onChange?.({ value_text: e.target.value })}
-            onBlur={(e) => onCommitText?.(e.target.value)}
-            placeholder="answer"
-            inputProps={{
-              style: { textAlign: "center", fontWeight: 700 },
-              "aria-label": "gap answer",
-            }}
-            sx={{ mx: 0.75, width: Math.max(110, (value.value_text?.length || 6) * 11), verticalAlign: "baseline" }}
-          />
-          {after}
-        </Typography>
+        <>
+          <Typography variant="body2" component="div" sx={{ mt: 1, lineHeight: 2.4 }}>
+            {before}
+            <TextField
+              variant="standard"
+              size="small"
+              disabled={disabled}
+              value={value.value_text ?? ""}
+              onChange={(e) => onChange?.({ value_text: e.target.value })}
+              onBlur={(e) => onCommitText?.(e.target.value)}
+              placeholder="answer"
+              inputProps={{
+                style: { textAlign: "center", fontWeight: 700 },
+                "aria-label": "gap answer",
+              }}
+              sx={{ mx: 0.75, width: Math.max(110, (value.value_text?.length || 6) * 11), verticalAlign: "baseline" }}
+            />
+            {after}
+          </Typography>
+          {!disabled && <WordLimitHint instructions={q.task_instructions} value={value.value_text} />}
+        </>
       );
     }
     // No detectable blank — fall through to the plain short input below.
@@ -174,15 +216,18 @@ export default function QuestionInput({ question: q, value = {}, onChange, onCom
 
   // short (default) / gap_fill without a marker
   return (
-    <TextField
-      size="small"
-      fullWidth
-      disabled={disabled}
-      placeholder="Type your answer…"
-      value={value.value_text ?? ""}
-      onChange={(e) => onChange?.({ value_text: e.target.value })}
-      onBlur={(e) => onCommitText?.(e.target.value)}
-      sx={{ mt: 1 }}
-    />
+    <>
+      <TextField
+        size="small"
+        fullWidth
+        disabled={disabled}
+        placeholder="Type your answer…"
+        value={value.value_text ?? ""}
+        onChange={(e) => onChange?.({ value_text: e.target.value })}
+        onBlur={(e) => onCommitText?.(e.target.value)}
+        sx={{ mt: 1 }}
+      />
+      {!disabled && <WordLimitHint instructions={q.task_instructions} value={value.value_text} />}
+    </>
   );
 }
