@@ -40,3 +40,46 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  # CI-driven deploys: the Render GitHub webhook proved unreliable (pushes
+  # silently didn't deploy, letting code and DB migrations drift apart), so
+  # main deploys through the Deploy Hook here — only after both test jobs
+  # pass — and the job fails loudly if the API doesn't come back healthy.
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_URL secret is not set — skipping deploy."
+            exit 0
+          fi
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          echo "Deploy triggered."
+
+      - name: Wait for healthy API
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ] || [ -z "${{ secrets.API_HEALTH_URL }}" ]; then
+            echo "::warning::Secrets missing — skipping post-deploy health check."
+            exit 0
+          fi
+          # Give the Docker build + swap up to 15 minutes, then insist on
+          # a stretch of healthy responses (a crash-looping instance can
+          # answer once and die).
+          sleep 90
+          for attempt in $(seq 1 56); do
+            if curl -fsS --max-time 20 "${{ secrets.API_HEALTH_URL }}" >/dev/null 2>&1; then
+              echo "API healthy (attempt $attempt) — confirming it stays up..."
+              sleep 30
+              if curl -fsS --max-time 20 "${{ secrets.API_HEALTH_URL }}"; then
+                echo " — deploy confirmed healthy."
+                exit 0
+              fi
+              echo "API died again after responding — still watching."
+            fi
+            sleep 15
+          done
+          echo "::error::API never became healthy after the deploy — check Render events/logs."
+          exit 1

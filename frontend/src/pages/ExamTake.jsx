@@ -4,8 +4,10 @@ import React, {
 import {
   Box, Typography, Paper,
   TextField, Button, Stack, Alert, CircularProgress, Chip, Tooltip, LinearProgress,
-  IconButton, Snackbar,
+  IconButton, Snackbar, Dialog, DialogTitle, DialogContent, DialogActions,
 } from "@mui/material";
+import TextDecreaseRoundedIcon from "@mui/icons-material/TextDecreaseRounded";
+import TextIncreaseRoundedIcon from "@mui/icons-material/TextIncreaseRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CloudDoneRoundedIcon from "@mui/icons-material/CloudDoneRounded";
 import CloudSyncRoundedIcon from "@mui/icons-material/CloudSyncRounded";
@@ -80,6 +82,41 @@ export default function ExamTake() {
   const [timeLeft, setTimeLeft] = useState(null);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const [timeToast, setTimeToast] = useState("");
+  // Pre-submit check: list the unanswered official numbers before submitting.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // CBT comfort settings, persisted across tests: text size and the
+  // passage/questions split (the official test has both controls).
+  const [fontScale, setFontScale] = useState(() => {
+    const v = parseFloat(localStorage.getItem("exam-font-scale"));
+    return Number.isFinite(v) && v >= 0.85 && v <= 1.3 ? v : 1;
+  });
+  const changeFontScale = (delta) =>
+    setFontScale((s) => Math.min(1.3, Math.max(0.85, Math.round((s + delta) * 100) / 100)));
+  const [splitPct, setSplitPct] = useState(() => {
+    const v = parseFloat(localStorage.getItem("exam-split-pct"));
+    return Number.isFinite(v) && v >= 30 && v <= 70 ? v : 50;
+  });
+  // Persist outside the updaters (state updaters must stay side-effect free).
+  useEffect(() => {
+    try {
+      localStorage.setItem("exam-font-scale", String(fontScale));
+      localStorage.setItem("exam-split-pct", String(Math.round(splitPct)));
+    } catch { /* best-effort */ }
+  }, [fontScale, splitPct]);
+  const splitDrag = useRef(null); // container element while dragging
+
+  const onSplitPointerDown = (e) => {
+    splitDrag.current = e.currentTarget.parentElement;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onSplitPointerMove = (e) => {
+    const box = splitDrag.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return;
+    const pct = Math.min(70, Math.max(30, ((e.clientX - box.left) / box.width) * 100));
+    setSplitPct(pct);
+  };
+  const onSplitPointerUp = () => { splitDrag.current = null; };
 
   // Flag-for-review + passage highlights survive a refresh via localStorage,
   // scoped to this attempt.
@@ -317,14 +354,34 @@ export default function ExamTake() {
     return n + (isAnswered(q) ? 1 : 0);
   }, 0);
 
+  // Manual submits go through a check listing unanswered numbers first (like
+  // the official test's review screen); the timer's auto-submit skips it.
+  const unansweredLabels = flatQuestions.filter((q) => !isAnswered(q)).map((q) => qNumber[q.id]);
+  const requestSubmit = () => {
+    if (unansweredLabels.length > 0) setConfirmOpen(true);
+    else handleSubmit();
+  };
+
   const jumpTo = (id) =>
     qRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   // ── A single question row inside a task box ──────────────────────────────
-  const renderQuestion = (q, isLast) => (
+  // `droppable` rows (matching tasks) accept a letter chip dragged from the
+  // task box's option bank; the dropdown stays as the universal input.
+  const renderQuestion = (q, isLast, droppable = false) => (
     <Box
       key={q.id}
       ref={(el) => { qRefs.current[q.id] = el; }}
+      {...(droppable && {
+        onDragOver: (e) => e.preventDefault(),
+        onDrop: (e) => {
+          e.preventDefault();
+          const idx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+          if (Number.isInteger(idx) && idx >= 0 && idx < (q.options || []).length) {
+            handleMCQ(q.id, idx);
+          }
+        },
+      })}
       sx={(t) => ({
         px: 2, py: 1.5, scrollMarginTop: TOPBAR_HEIGHT + 96,
         borderBottom: isLast ? "none" : "1px solid",
@@ -391,6 +448,10 @@ export default function ExamTake() {
     const start = qSpan[first.id]?.[0];
     const end = qSpan[last.id]?.[1];
     const label = start === end ? `Question ${start}` : `Questions ${start}–${end}`;
+    // Matching tasks get a drag-and-drop option bank, like the official CBT.
+    const isMatching =
+      group.items.every((it) => it.qformat === "matching") &&
+      (first.options || []).length > 0;
     return (
       <Paper key={group.key + gi} variant="outlined" sx={{ mb: 2.5, overflow: "hidden" }}>
         <Box
@@ -406,8 +467,32 @@ export default function ExamTake() {
               {group.instructions}
             </Typography>
           )}
+          {isMatching && (
+            <Box sx={{ mt: 1 }}>
+              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                {(first.options || []).map((opt, i) => (
+                  <Tooltip key={i} title={opt}>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", String(i));
+                        e.dataTransfer.effectAllowed = "copy";
+                      }}
+                      label={String.fromCharCode(65 + i)}
+                      sx={{ cursor: "grab", fontWeight: 700, "&:active": { cursor: "grabbing" } }}
+                    />
+                  </Tooltip>
+                ))}
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                Drag a letter onto its question — or pick from the dropdowns.
+              </Typography>
+            </Box>
+          )}
         </Box>
-        {group.items.map((q, i) => renderQuestion(q, i === group.items.length - 1))}
+        {group.items.map((q, i) => renderQuestion(q, i === group.items.length - 1, isMatching))}
       </Paper>
     );
   };
@@ -569,6 +654,23 @@ export default function ExamTake() {
               />
             </Tooltip>
           )}
+          {/* Text size, like the official CBT's accessibility settings */}
+          <Stack direction="row" spacing={0} alignItems="center">
+            <Tooltip title="Smaller text">
+              <span>
+                <IconButton size="small" disabled={fontScale <= 0.85} onClick={() => changeFontScale(-0.15)}>
+                  <TextDecreaseRoundedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Larger text">
+              <span>
+                <IconButton size="small" disabled={fontScale >= 1.3} onClick={() => changeFontScale(0.15)}>
+                  <TextIncreaseRoundedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Stack>
           {timeLeft !== null && (
             <Typography
               variant="h6"
@@ -590,7 +692,7 @@ export default function ExamTake() {
           <Button
             variant="contained"
             disabled={submitting}
-            onClick={handleSubmit}
+            onClick={requestSubmit}
           >
             {submitting ? "Submitting…" : "Submit Test"}
           </Button>
@@ -646,7 +748,16 @@ export default function ExamTake() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* ── Sections (layout adapts per skill) ── */}
+      {/* ── Sections (layout adapts per skill) ──
+          The wrapper scales the reading text like the official CBT's text-size
+          setting; the inputs scale with it so nothing falls out of line. */}
+      <Box
+        sx={{
+          "& .MuiTypography-body2": { fontSize: `${0.875 * fontScale}rem` },
+          "& .MuiFormControlLabel-label": { fontSize: `${0.95 * fontScale}rem` },
+          "& .MuiInputBase-input": { fontSize: `${0.95 * fontScale}rem` },
+        }}
+      >
       {(examData?.sections || []).map((sec) => {
         const skill = (sec.skill || "reading").toLowerCase();
         const isReading = skill === "reading";
@@ -660,15 +771,38 @@ export default function ExamTake() {
             </Stack>
 
             {isReading ? (
-              /* Reading: passage beside the questions */
+              /* Reading: passage beside the questions, split by a draggable
+                 divider like the official computer-based test. */
               <Box
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                  gap: 3,
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    md: `minmax(0, ${splitPct}fr) 18px minmax(0, ${100 - splitPct}fr)`,
+                  },
+                  gap: { xs: 3, md: 0.5 },
                 }}
               >
                 {renderReference(sec, skill)}
+                <Box
+                  onPointerDown={onSplitPointerDown}
+                  onPointerMove={onSplitPointerMove}
+                  onPointerUp={onSplitPointerUp}
+                  sx={{
+                    display: { xs: "none", md: "flex" },
+                    alignItems: "center", justifyContent: "center",
+                    cursor: "col-resize", touchAction: "none",
+                    "&:hover .split-bar, &:active .split-bar": { bgcolor: "primary.main" },
+                  }}
+                >
+                  <Box
+                    className="split-bar"
+                    sx={{
+                      width: 4, height: 120, borderRadius: 2, bgcolor: "divider",
+                      position: "sticky", top: "40vh", transition: "background-color 0.15s",
+                    }}
+                  />
+                </Box>
                 <Box>{groupTasks(sec.questions).map(renderTaskGroup)}</Box>
               </Box>
             ) : (
@@ -681,17 +815,48 @@ export default function ExamTake() {
           </Box>
         );
       })}
+      </Box>
 
       <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2, mb: 4 }}>
         <Button
           variant="contained"
           size="large"
           disabled={submitting}
-          onClick={handleSubmit}
+          onClick={requestSubmit}
         >
           {submitting ? "Submitting…" : "Submit Test"}
         </Button>
       </Box>
+
+      {/* Pre-submit check: like the official review screen, list what's blank */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>
+          {unansweredLabels.length === 1
+            ? "1 question is unanswered"
+            : `${unansweredLabels.length} questions are unanswered`}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            There is no penalty for wrong answers on IELTS — an educated guess
+            beats a blank.
+          </Typography>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            {unansweredLabels.map((label) => (
+              <Chip key={label} size="small" variant="outlined" label={label} />
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Keep working</Button>
+          <Button
+            variant="contained"
+            disabled={submitting}
+            onClick={() => { setConfirmOpen(false); handleSubmit(); }}
+          >
+            Submit anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={!!timeToast}

@@ -11,6 +11,23 @@ Supabase             → Postgres (session pooler) + Storage (uploads)
 ## Backend (Render)
 Uses the root `Dockerfile`. Health check path: `/api/health` (declared in `render.yaml`).
 
+**Deploys are CI-driven.** Render's own GitHub webhook proved unreliable (pushes
+silently didn't deploy while `alembic upgrade head` migrations moved ahead — the
+recipe for the crash-loop we hit on 2026-07-05), so the `deploy` job in
+`.github/workflows/ci.yml` triggers the Render **Deploy Hook** after both test
+jobs pass on `main`, then polls `/api/health` and fails the run if the API does
+not come back. Setup:
+
+1. Render → service → Settings → Deploy Hook → copy the URL into the repo
+   secret `RENDER_DEPLOY_HOOK_URL`.
+2. Set the repo secret `API_HEALTH_URL` to `https://<api-domain>/api/health`
+   (the keep-alive workflow uses the same one).
+3. Turn Render's **Auto-Deploy off** (Settings → Build & Deploy) so a revived
+   webhook can't race the CI deploy.
+
+Never run `alembic upgrade` against the production DB from a laptop — the
+deploy pipeline is the only thing that should migrate it.
+
 **Environment variables to set in Render:**
 | Var | Required | Notes |
 |---|---|---|
