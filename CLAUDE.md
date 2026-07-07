@@ -90,6 +90,31 @@ code has been removed and remaining work targets IELTS only.
 - **Student exam flow** — `backend/routers/student_flow.py` (`/api/attempts/*`):
   start attempt → fetch content → submit answers → results.
 
+## Testing
+- **One canonical backend suite, in `tests/` at the repo root.** CI runs
+  `pytest -q` (`.github/workflows/ci.yml`); `pytest.ini` pins
+  `testpaths = tests` and `pythonpath = .`, so run it from the repo root. Frontend:
+  `cd frontend && npm test`.
+- Tests run against a **fresh in-memory SQLite DB per test**, wired in by
+  overriding the `get_db` dependency in `tests/conftest.py`; the real Supabase
+  Postgres is never touched. The `TestClient` is built *without* the context-manager
+  form on purpose, so the app lifespan never fires.
+- `conftest.py` sets `AUTH_RATE_LIMIT_DISABLED=1` before the app imports — this
+  disables **both** the per-IP auth limiter and the global per-IP request limiter,
+  so the suite's request volume never trips a 429.
+- Key fixtures (all bound to the same per-test engine): `client` (with
+  `client.session_factory` for building rows on that engine directly), `db` /
+  `db_session`, `teacher_user` / `student_user` / `teacher_headers` /
+  `student_headers`, exam scaffolding (`reading_exam`, `listening_exam`,
+  `mixed_exam`, `exam_attempt_with_answers`), and `writing_task` /
+  `writing_submission`. Deep object graphs for service-level tests come from
+  `tests/factories.py`.
+- **Keep it a single conftest.** Don't add a second test dir with its own
+  `client` / `get_db` override: two module-level overrides clobber each other under
+  a combined run (a per-test `client` teardown that clears `app.dependency_overrides`
+  wipes the other suite's override, sending its requests at the real DB). The old
+  `backend/tests/` suite was folded in here for exactly that reason.
+
 ## Status & boundaries
 - **Test version.** Schema is created with `create_all` (no Alembic yet).
 - **Auth is real JWT.** `POST /api/auth/login` and `/register` verify bcrypt and

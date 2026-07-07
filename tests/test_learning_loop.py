@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from backend.service import models
 from backend.service.review_sched import enqueue_wrong, apply_result, MAX_INTERVAL_DAYS
 from backend.service.subskills import subskill_tallies, heatmap, SUB_SKILLS, MIN_ATTEMPTS
-from backend.tests import factories as f
+from tests import factories as f
 
 
 def _a_question(db):
