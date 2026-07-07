@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models, scoping, storage
 from backend.service.auth_deps import get_current_user
 from backend.service.subskills import SUB_SKILLS, SUB_SKILL_LABELS, heatmap
@@ -119,7 +120,7 @@ def practice_questions(
 class PracticeAnswer(BaseModel):
     question_id: int
     choice_index: Optional[int] = None
-    value_text: Optional[str] = None
+    value_text: OptionalSanitized(5000) = None
 
 
 class PracticeSubmitIn(BaseModel):

@@ -8,6 +8,7 @@ from backend.service.database import get_db
 from backend.service import models, scoping, storage
 from backend.service.auth_deps import get_current_user, require_role
 from backend.service.subskills import SUB_SKILLS
+from backend.service.sanitize import OptionalSanitized, Sanitized
 
 router = APIRouter(prefix="/api/tests", tags=["tests"])
 
@@ -79,7 +80,7 @@ async def upload_media(
 
 class QuestionIn(BaseModel):
     qtype: QType                                # mcq | short | explain
-    prompt: str
+    prompt: Sanitized(10000)
     options: Optional[List[str]] = None         # for mcq
     correct_index: Optional[int] = None         # for mcq
     accept_answers: Optional[List[str]] = None  # for short
@@ -91,21 +92,21 @@ class QuestionIn(BaseModel):
     qformat: Optional[Literal["tfng", "ynng", "matching", "multi_select", "gap_fill"]] = None
     correct_indices: Optional[List[int]] = None  # multi_select answer set
     select_count: Optional[int] = None           # picks required for multi_select
-    task_instructions: Optional[str] = None      # instruction block above the task
+    task_instructions: OptionalSanitized(2000) = None  # instruction block above the task
 
 
 class SectionIn(BaseModel):
     position: int
     skill: Skill                                # listening | reading | writing | speaking
-    title: str
-    passage_md: str = ""
+    title: Sanitized(255)
+    passage_md: Sanitized(300000) = ""
     audio_url: Optional[str] = None             # listening audio
     image_url: Optional[str] = None             # writing Task 1 chart/diagram
     questions: List[QuestionIn] = []
 
 
 class TestIn(BaseModel):
-    name: str
+    name: Sanitized(255)
     difficulty: Difficulty = "medium"           # low | medium | high
     time_limit_min: int = 60
     reading_min: int = 0
@@ -193,7 +194,7 @@ class TestPatchIn(BaseModel):
 
 
 class TestUpdateIn(BaseModel):
-    name: str
+    name: Sanitized(255)
     difficulty: Difficulty = "medium"
     time_limit_min: int = 60
     sections: List[SectionIn]

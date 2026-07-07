@@ -12,9 +12,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.ratelimit import daily_quota, rate_limit
 from backend.service import models, storage, ai_grading
 from backend.service.config import settings
 from backend.service.auth_deps import get_current_user, require_role
+
+# Guard the paid Gemini grading call: bursts per minute + a daily budget.
+_grade_limiter = rate_limit(10, 60)
+_grade_daily = daily_quota(60, "AI speaking grading")
 
 router = APIRouter(prefix="/api/speaking", tags=["speaking"])
 
@@ -170,6 +175,8 @@ def ai_grade_submission(
     submission_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(_teacher),
+    _rl: None = Depends(_grade_limiter),
+    _dq: None = Depends(_grade_daily),
 ):
     """Run Gemini grading on the transcript and store a DRAFT (status
     'ai_graded'). Teacher-only; students don't see it until approved."""

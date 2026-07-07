@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from .service.config import settings
 from .service.database import engine
 from .service import models  # noqa: F401  (registers tables for Alembic autogenerate)
+from .service.ratelimit import check_global_limit
+from .service.sanitize import MAX_JSON_BODY_BYTES
+from .service.secrets_guard import install_log_scrubbing, sentry_before_send
 from .routers import (
     auth, tests_io, autograde, analytics, student_flow,
     dashboard, me, flashcards, teacher,
@@ -34,6 +37,8 @@ def _init_sentry() -> None:
             dsn=dsn,
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             environment=os.getenv("ENV", "production"),
+            send_default_pii=False,          # never ship user PII with events
+            before_send=sentry_before_send,  # redact any embedded secrets
         )
         logger.info("Sentry error tracking enabled.")
     except Exception:  # noqa: BLE001
@@ -57,6 +62,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    install_log_scrubbing()   # keep API keys/DB passwords out of every log line
     _init_sentry()
     app = FastAPI(title="IELTS Platform API", version="0.1.0", lifespan=lifespan)
 
@@ -104,6 +110,30 @@ def create_app() -> FastAPI:
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
         return response
+
+    # Global flood protection + oversized-body rejection, before any parsing.
+    # Endpoint-specific limits (auth per-IP, AI per-user + daily quotas) stay
+    # much tighter; this is the outer wall for everything else.
+    @app.middleware("http")
+    async def _request_guards(request: Request, call_next):
+        try:
+            check_global_limit(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers or {},
+            )
+        if request.method in ("POST", "PUT", "PATCH"):
+            ctype = request.headers.get("content-type", "")
+            length = request.headers.get("content-length")
+            if "application/json" in ctype and length and length.isdigit() \
+                    and int(length) > MAX_JSON_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Request body is too large."},
+                )
+        return await call_next(request)
 
     app.include_router(auth.router)
     app.include_router(tests_io.router)
