@@ -156,7 +156,7 @@ def generate_for_question(question, passage_md: str, skill: str | None,
     except Exception as e:  # noqa: BLE001
         msg = str(e).lower()
         if any(k in msg for k in ("503", "unavailable", "overloaded", "429", "rate limit", "resource_exhausted")):
-            raise HTTPException(503, "The AI service is busy right now. Please try again in a few seconds.")
+            raise HTTPException(503, "AI explanations are unavailable right now — usually the free-tier daily limit or high demand. Please try again later.")
         raise HTTPException(502, f"AI service error: {e}")
 
     raw = (resp.text or "").strip()

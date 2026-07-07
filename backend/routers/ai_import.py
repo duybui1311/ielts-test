@@ -411,8 +411,8 @@ def _call_with_retries(fn):
     if any(k in m for k in _TRANSIENT_KEYS):
         raise HTTPException(
             503,
-            "The AI service is busy right now (high demand). Please wait a few "
-            "seconds and try Convert again.",
+            "AI is unavailable right now — usually the free-tier daily limit or "
+            "high demand. Please try again later, then Convert again.",
         )
     raise HTTPException(502, f"AI service error: {last_err}")
 

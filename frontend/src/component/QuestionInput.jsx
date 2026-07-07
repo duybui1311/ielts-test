@@ -7,6 +7,13 @@ import {
 /** Letter label for a matching/multi-select option: A, B, C… */
 const letter = (i) => String.fromCharCode(65 + i);
 
+/** Display label for a chosen matching option: just "A" when the option text is
+ *  blank or is itself the letter, else "A — <text>". Avoids a redundant "A — A". */
+export function matchingLabel(i, optText) {
+  const L = letter(i);
+  return optText && optText !== L ? `${L} — ${optText}` : L;
+}
+
 /** Parse a multi-select answer (JSON array of option indices) from value_text. */
 export function parsePicked(valueText) {
   try {
@@ -112,14 +119,17 @@ export default function QuestionInput({ question: q, value = {}, onChange, onCom
           v === "" ? (
             <Typography component="span" color="text.secondary">Choose…</Typography>
           ) : (
-            `${letter(v)} — ${opts[v]}`
+            // When the option text is just its own letter (or blank), show the
+            // bare letter instead of a redundant "A — A".
+            matchingLabel(v, opts[v])
           )
         }
         sx={{ mt: 1 }}
       >
         {opts.map((opt, i) => (
           <MenuItem key={i} value={i} sx={{ whiteSpace: "normal", maxWidth: 480 }}>
-            <strong style={{ marginRight: 8 }}>{letter(i)}</strong> {opt}
+            <strong style={{ marginRight: 8 }}>{letter(i)}</strong>
+            {opt && opt !== letter(i) ? opt : null}
           </MenuItem>
         ))}
       </Select>

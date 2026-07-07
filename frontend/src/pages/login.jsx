@@ -3,13 +3,12 @@ import {
 	Box, Stack, TextField, Button, Typography,
 	InputAdornment, IconButton, Alert,
 } from "@mui/material";
-import { motion } from "framer-motion";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import LockRounded from "@mui/icons-material/LockRounded";
 import { useNavigate, useLocation } from "react-router-dom";
-import { GradientText } from "../component/ui";
+import { GradientText, FadeIn } from "../component/ui";
 import AuthHero from "../component/AuthHero";
 
 /* ---------- API base + URL helper ---------- */
@@ -27,8 +26,6 @@ import {
 	setAuthed, logout, getRole, landingFor, isAuthed, normalizeRole,
 } from "../auth";
 export { setAuthed, logout, getRole, landingFor };
-
-const MotionBox = motion.create(Box);
 
 /* ------------------------------ Component ------------------------------ */
 
@@ -48,15 +45,36 @@ export default function Login() {
 
 	// ui state
 	const [submitting, setSubmitting] = React.useState(false);
+	const [slow, setSlow] = React.useState(false);   // backend cold-start hint
 	const [error, setError] = React.useState("");
 	const [forgotMode, setForgotMode] = React.useState(false);
 	const [forgotSent, setForgotSent] = React.useState("");
 	const googleDivRef = React.useRef(null);
+	const slowTimer = React.useRef(null);
 
 	React.useEffect(() => {
-		if (isAuthed()) navigate(nextParam || landingFor(getRole()), { replace: true });
+		if (isAuthed()) { navigate(nextParam || landingFor(getRole()), { replace: true }); return; }
+		// Nudge the backend awake while the user reads/types: the free hosting
+		// tier sleeps after ~15 min idle, so the first request otherwise stalls
+		// 30–60 s. Fire-and-forget — the response is irrelevant.
+		fetch(joinURL(API_BASE, "/api/health")).catch(() => {});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	// While a request is in flight, surface a "server waking up" hint if it drags
+	// on — cold starts on the free tier can take up to a minute.
+	const beginRequest = () => {
+		setSubmitting(true);
+		clearTimeout(slowTimer.current);
+		setSlow(false);
+		slowTimer.current = setTimeout(() => setSlow(true), 4000);
+	};
+	const endRequest = () => {
+		setSubmitting(false);
+		clearTimeout(slowTimer.current);
+		setSlow(false);
+	};
+	React.useEffect(() => () => clearTimeout(slowTimer.current), []);
 
 	const finishLogin = React.useCallback((data, emailUsed) => {
 		const role = normalizeRole(data?.role) || "student";
@@ -111,7 +129,7 @@ export default function Login() {
 		const email = identifier.trim();
 		if (!email || !email.includes("@")) { setError("Enter your account email first."); return; }
 		try {
-			setSubmitting(true);
+			beginRequest();
 			const res = await fetch(joinURL(API_BASE, "/api/auth/forgot"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -123,7 +141,7 @@ export default function Login() {
 		} catch {
 			setError("Could not send the reset email. Please try again.");
 		} finally {
-			setSubmitting(false);
+			endRequest();
 		}
 	};
 
@@ -136,7 +154,7 @@ export default function Login() {
 		if (!password) { setError("Please enter your password."); return; }
 
 		try {
-			setSubmitting(true);
+			beginRequest();
 			const res = await fetch(joinURL(API_BASE, "/api/auth/login"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -155,7 +173,7 @@ export default function Login() {
 		} catch {
 			setError("Unable to sign in. Please try again.");
 		} finally {
-			setSubmitting(false);
+			endRequest();
 		}
 	};
 
@@ -172,12 +190,9 @@ export default function Login() {
 
 			{/* Form panel */}
 			<Box sx={{ display: "grid", placeItems: "center", p: { xs: 3, sm: 4 } }}>
-				<MotionBox
+				<FadeIn
 					component="form"
 					onSubmit={onSubmit}
-					initial={{ opacity: 0, y: 18 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
 					sx={(theme) => ({
 						p: { xs: 3, sm: 4 }, width: "100%", maxWidth: 420,
 						borderRadius: 4,
@@ -218,6 +233,11 @@ export default function Login() {
 
 						{error && <Alert severity="error">{error}</Alert>}
 						{forgotSent && <Alert severity="success" onClose={() => setForgotSent("")}>{forgotSent}</Alert>}
+						{slow && (
+							<Alert severity="info">
+								Waking the server… the free tier can take up to a minute on the first request.
+							</Alert>
+						)}
 
 						<TextField
 							label="Email or username"
@@ -318,7 +338,7 @@ export default function Login() {
 							</Button>.
 						</Typography>
 					</Stack>
-				</MotionBox>
+				</FadeIn>
 			</Box>
 		</Box>
 	);
