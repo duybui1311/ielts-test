@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models, scoping, storage
 from backend.service.auth_deps import get_current_user, require_role
 from backend.service.review_sched import apply_result
@@ -20,7 +21,7 @@ _teacher = require_role("teacher", "admin")
 
 class GradeIn(BaseModel):
     band: float
-    feedback: str = ""
+    feedback: Sanitized(10000) = ""
     ai_result: Optional[dict] = None      # optional edited AI criterion breakdown to persist
     share_ai: bool = True                 # if False, the AI breakdown is not shown to the student
 
@@ -251,8 +252,8 @@ def review_result(
 class CommentIn(BaseModel):
     start_offset: int
     end_offset: int
-    quote: str
-    comment: str
+    quote: Sanitized(2000)
+    comment: Sanitized(5000)
 
 
 def _comment_out(c: models.WritingComment) -> dict:

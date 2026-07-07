@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models
 from backend.service.auth_deps import get_current_user
 from backend.routers.auth import hash_password, verify_password, validate_password
@@ -24,7 +25,7 @@ def my_profile(user: models.User = Depends(get_current_user)):
 
 
 class ProfilePatchIn(BaseModel):
-    full_name: Optional[str] = None
+    full_name: OptionalSanitized(120) = None
 
 
 @router.patch("")
@@ -43,8 +44,8 @@ def update_profile(
 
 
 class PasswordIn(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: Sanitized(200)
+    new_password: Sanitized(200)
 
 
 @router.post("/password")

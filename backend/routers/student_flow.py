@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models, scoping, storage
 from backend.service.autograde import autograde_exam_attempt
 from backend.service.auth_deps import get_current_user
@@ -266,7 +267,7 @@ def get_content(
 class AnswerIn(BaseModel):
     question_id: int
     choice_index: Optional[int] = None
-    value_text: Optional[str] = None
+    value_text: OptionalSanitized(5000) = None
 
 
 @router.post("/api/attempts/{attempt_id}/answer")
@@ -519,7 +520,7 @@ def get_results(
 # ── Join a class with the teacher's share code ──────────────────────────────
 
 class JoinClassIn(BaseModel):
-    code: str
+    code: Sanitized(16)
 
 
 @router.post("/api/classes/join")

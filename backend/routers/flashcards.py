@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models
 from backend.service.auth_deps import get_current_user
 
@@ -12,12 +13,12 @@ router = APIRouter(prefix="/api/flashcards", tags=["flashcards"])
 
 
 class DeckIn(BaseModel):
-    name: str
+    name: Sanitized(120)
 
 
 class CardIn(BaseModel):
-    front: str
-    back: str
+    front: Sanitized(2000)
+    back: Sanitized(2000)
 
 
 class ReviewIn(BaseModel):

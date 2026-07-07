@@ -9,9 +9,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
+from backend.service.ratelimit import daily_quota, rate_limit
 from backend.service import models, storage, ai_grading
 from backend.service.config import settings
 from backend.service.auth_deps import get_current_user, require_role
+
+# Guard the paid Gemini grading call: bursts per minute + a daily budget.
+_grade_limiter = rate_limit(10, 60)
+_grade_daily = daily_quota(60, "AI writing grading")
 
 router = APIRouter(prefix="/api/writing", tags=["writing"])
 
@@ -30,17 +36,17 @@ def _write_ai_error_tags(db: Session, *, user_id: int, skill: str, tags: list) -
 
 
 class TaskIn(BaseModel):
-    task_type: str = "task2"           # task1 | task2
-    title: str
-    prompt_md: str
-    image_url: Optional[str] = None
+    task_type: Sanitized(10) = "task2"           # task1 | task2
+    title: Sanitized(255)
+    prompt_md: Sanitized(20000)
+    image_url: OptionalSanitized(1000) = None
     time_limit_min: int = 20
     min_words: Optional[int] = None
 
 
 class SubmissionIn(BaseModel):
     task_id: int
-    response_text: str
+    response_text: Sanitized(50000)
 
 
 def _task_out(t: models.WritingTask):
@@ -196,6 +202,8 @@ def ai_grade_submission(
     submission_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(_teacher),
+    _rl: None = Depends(_grade_limiter),
+    _dq: None = Depends(_grade_daily),
 ):
     """Run Gemini grading and store a DRAFT (status 'ai_graded', not yet approved).
     Teacher-only — students never see the result until a teacher approves it."""

@@ -10,15 +10,17 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models
 from backend.service.auth_deps import get_current_user, require_role
 from backend.service.explain import generate_for_question
-from backend.service.ratelimit import rate_limit
+from backend.service.ratelimit import daily_quota, rate_limit
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
 
 # Guard the paid Gemini call: 20 explanations/min per user.
 _explain_limiter = rate_limit(20, 60)
+_explain_daily = daily_quota(80, "AI explanations")
 _teacher = require_role("teacher", "admin")
 
 
@@ -35,7 +37,7 @@ def _question_payload(q: models.Question, mistake_note: str = "") -> dict:
 class ExplainIn(BaseModel):
     # The student's own (incorrect) answer. When present, the response includes a
     # personalized `mistake_note` addressing that specific answer.
-    student_answer: Optional[str] = None
+    student_answer: OptionalSanitized(2000) = None
 
 
 @router.post("/{question_id}/explain")
@@ -45,6 +47,7 @@ def explain_question(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
     _rl: None = Depends(_explain_limiter),
+    _dq: None = Depends(_explain_daily),
 ):
     q = db.query(models.Question).filter(models.Question.id == question_id).first()
     if not q:
@@ -81,7 +84,7 @@ def explain_question(
 
 
 class ReportIn(BaseModel):
-    reason: Optional[str] = None
+    reason: OptionalSanitized(2000) = None
 
 
 @router.post("/{question_id}/report-explanation")

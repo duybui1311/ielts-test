@@ -10,6 +10,7 @@ from typing import Optional
 from pydantic import BaseModel
 import bcrypt
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import mailer, models
 from backend.service.ratelimit import rate_limit_ip
 from backend.service.auth_deps import create_access_token, get_current_user
@@ -18,15 +19,15 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginIn(BaseModel):
-    email: str          # accepts email OR username
-    password: str
+    email: Sanitized(255)          # accepts email OR username
+    password: Sanitized(200)
 
 
 class RegisterIn(BaseModel):
-    email: str
-    password: str
-    full_name: Optional[str] = None
-    username: Optional[str] = None
+    email: Sanitized(255)
+    password: Sanitized(200)
+    full_name: OptionalSanitized(120) = None
+    username: OptionalSanitized(100) = None
     role: str = "student"          # ignored — self-signup is always a student
 
 
@@ -227,7 +228,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db),
 # ── Password reset ───────────────────────────────────────────────────────────
 
 class ForgotIn(BaseModel):
-    email: str
+    email: Sanitized(255)
 
 
 @router.post("/forgot")
@@ -254,8 +255,8 @@ def forgot_password(payload: ForgotIn, db: Session = Depends(get_db),
 
 
 class ResetIn(BaseModel):
-    token: str
-    password: str
+    token: Sanitized(128)
+    password: Sanitized(200)
 
 
 @router.post("/reset")
@@ -270,7 +271,7 @@ def reset_password(payload: ResetIn, db: Session = Depends(get_db)):
 # ── Email verification ───────────────────────────────────────────────────────
 
 class VerifyIn(BaseModel):
-    token: str
+    token: Sanitized(128)
 
 
 @router.post("/verify")
@@ -293,7 +294,7 @@ def resend_verification(db: Session = Depends(get_db),
 # ── Google sign-in ───────────────────────────────────────────────────────────
 
 class GoogleIn(BaseModel):
-    credential: str    # Google Identity Services ID token
+    credential: Sanitized(4096)    # Google Identity Services ID token
 
 
 @router.post("/google", response_model=LoginOut)

@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.service.database import get_db
+from backend.service.sanitize import OptionalSanitized, Sanitized
 from backend.service import models, scoping
 from backend.service.auth_deps import require_role
 from backend.service.subskills import heatmap as subskill_heatmap
@@ -64,7 +65,7 @@ def teacher_classes(
 
 
 class ClassIn(BaseModel):
-    name: str
+    name: Sanitized(120)
 
 
 @router.post("/classes", status_code=201)
