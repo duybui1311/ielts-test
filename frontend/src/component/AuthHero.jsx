@@ -1,14 +1,12 @@
 import * as React from "react";
 import { Box, Stack, Typography } from "@mui/material";
-import { motion } from "framer-motion";
 import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
 import MenuBookRounded from "@mui/icons-material/MenuBookRounded";
 import HeadphonesRounded from "@mui/icons-material/HeadphonesRounded";
 import EditNoteRounded from "@mui/icons-material/EditNoteRounded";
 import MicRounded from "@mui/icons-material/MicRounded";
 import BoltRounded from "@mui/icons-material/BoltRounded";
-
-const MotionBox = motion.create(Box);
+import { FadeIn } from "./ui";
 
 const SKILLS = [
   { icon: <MenuBookRounded />, label: "Reading", grad: "linear-gradient(135deg,#0046FF,#4178FF)" },
@@ -18,9 +16,11 @@ const SKILLS = [
 ];
 
 /**
- * Animated marketing hero shared by the login and signup screens: a shifting
- * brand gradient, glowing orbs, floating per-skill glass cards and trust stats.
- * `headline` and `sub` let each screen set its own copy.
+ * Marketing hero shared by the login and signup screens: a shifting brand
+ * gradient, glowing orbs, floating per-skill glass cards and trust stats.
+ * Entrance animations use the CSS-only `FadeIn` (no framer-motion), so this
+ * hero — and the auth pages that import it — stay off the vendor-motion chunk
+ * and paint fast. `headline` and `sub` let each screen set its own copy.
  */
 export default function AuthHero({ headline, sub }) {
   return (
@@ -46,7 +46,7 @@ export default function AuthHero({ headline, sub }) {
         background: "radial-gradient(circle, rgba(115,200,210,0.40) 0%, rgba(115,200,210,0) 70%)",
         animation: "appPulseGlow 11s ease-in-out infinite 1s" }} />
 
-      <MotionBox initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} sx={{ position: "relative" }}>
+      <FadeIn sx={{ position: "relative" }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
           <Box sx={{ width: 48, height: 48, borderRadius: 2.5, display: "grid", placeItems: "center",
             fontWeight: 800, fontSize: 24, bgcolor: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
@@ -55,9 +55,9 @@ export default function AuthHero({ headline, sub }) {
           </Box>
           <Typography variant="h5" fontWeight={800}>Bandly</Typography>
         </Stack>
-      </MotionBox>
+      </FadeIn>
 
-      <MotionBox initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08 }} sx={{ position: "relative" }}>
+      <FadeIn delay={80} sx={{ position: "relative" }}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
           <AutoAwesomeRounded sx={{ fontSize: 18 }} />
           <Typography variant="overline" sx={{ opacity: 0.92 }}>AI-powered IELTS preparation</Typography>
@@ -68,29 +68,29 @@ export default function AuthHero({ headline, sub }) {
         <Typography sx={{ maxWidth: 480, opacity: 0.92, mt: 2, fontSize: "1.05rem" }}>
           {sub || "Realistic tests across all four skills, instant band scores, AI feedback on Writing & Speaking, and a clear map of what to work on next."}
         </Typography>
-      </MotionBox>
+      </FadeIn>
 
       <Box sx={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5, maxWidth: 460 }}>
         {SKILLS.map((s, i) => (
-          <MotionBox
+          <FadeIn
             key={s.label}
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.2 + i * 0.08 }}
-            whileHover={{ y: -5, scale: 1.02 }}
+            delay={200 + i * 80}
             sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 1.75, borderRadius: 3,
               bgcolor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)",
-              backdropFilter: "blur(8px)", cursor: "default" }}
+              backdropFilter: "blur(8px)", cursor: "default",
+              transition: "transform .2s cubic-bezier(0.22,1,0.36,1)",
+              "&:hover": { transform: "translateY(-5px) scale(1.02)" } }}
           >
             <Box sx={{ width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center",
               background: s.grad, boxShadow: "0 6px 16px rgba(0,0,0,0.25)", "& svg": { fontSize: 20 } }}>
               {s.icon}
             </Box>
             <Typography fontWeight={700}>{s.label}</Typography>
-          </MotionBox>
+          </FadeIn>
         ))}
       </Box>
 
-      <MotionBox initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.55 }} sx={{ position: "relative" }}>
+      <FadeIn delay={550} sx={{ position: "relative" }}>
         <Stack direction="row" spacing={3} sx={{ mt: 1 }}>
           {[
             { icon: <BoltRounded sx={{ fontSize: 18 }} />, k: "Instant", v: "band scores" },
@@ -106,7 +106,7 @@ export default function AuthHero({ headline, sub }) {
             </Stack>
           ))}
         </Stack>
-      </MotionBox>
+      </FadeIn>
     </Box>
   );
 }

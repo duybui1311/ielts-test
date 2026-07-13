@@ -155,7 +155,7 @@ def _run_gemini(system: str, user_text: str, categories) -> dict:
     if last_err is not None:
         m = str(last_err).lower()
         if any(k in m for k in ("503", "unavailable", "overloaded", "high demand", "429", "rate limit", "resource_exhausted")):
-            raise AIGradingError("The AI service is busy right now (high demand). Please try again in a few seconds.")
+            raise AIGradingError("AI grading is unavailable right now — usually the free-tier daily limit or high demand. Please try again later.")
         raise AIGradingError(f"AI service error: {last_err}")
 
     raw = (resp.text or "").strip()
